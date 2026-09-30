@@ -1,0 +1,4 @@
+expo.modules.melloblocker
+string mello_accessibility_description
+string mello_accessibility_label
+xml mello_accessibility_service

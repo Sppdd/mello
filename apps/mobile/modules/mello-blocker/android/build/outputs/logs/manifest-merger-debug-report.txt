@@ -1,0 +1,52 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:1:1-24:12
+INJECTED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:1:1-24:12
+	package
+		INJECTED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:1:11-69
+queries
+ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:3:3-8:13
+intent#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
+ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:4:5-7:14
+action#android.intent.action.MAIN
+ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:5:7-59
+	android:name
+		ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:5:15-56
+category#android.intent.category.LAUNCHER
+ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:6:7-67
+	android:name
+		ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:6:17-64
+application
+ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:10:3-23:17
+service#expo.modules.melloblocker.MelloAccessibilityService
+ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:11:5-22:15
+	android:label
+		ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:14:7-56
+	android:exported
+		ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:13:7-31
+	android:permission
+		ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:15:7-73
+	android:name
+		ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:12:7-73
+intent-filter#action:name:android.accessibilityservice.AccessibilityService
+ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:16:7-18:23
+action#android.accessibilityservice.AccessibilityService
+ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:17:9-84
+	android:name
+		ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:17:17-81
+meta-data#android.accessibilityservice
+ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:19:7-21:63
+	android:resource
+		ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:21:9-60
+	android:name
+		ADDED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml:20:9-52
+uses-sdk
+INJECTED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml
+INJECTED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/etharo/Desktop/mello/apps/mobile/modules/mello-blocker/android/src/main/AndroidManifest.xml

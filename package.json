@@ -1,0 +1,14 @@
+{
+  "name": "mello",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "api": "npm run dev -w @mello/api",
+    "mobile": "npm run start -w mobile",
+    "test": "npm test -w @mello/api",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

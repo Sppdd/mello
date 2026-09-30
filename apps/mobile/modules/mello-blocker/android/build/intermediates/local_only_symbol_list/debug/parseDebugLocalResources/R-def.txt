@@ -1,0 +1,5 @@
+R_DEF: Internal format may change without notice
+local
+string mello_accessibility_description
+string mello_accessibility_label
+xml mello_accessibility_service
