@@ -6,3 +6,5 @@ apps/api/data/
 *.log
 .DS_Store
 coverage/
+.gradle/
+build/
