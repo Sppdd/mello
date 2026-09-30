@@ -6,7 +6,7 @@ import * as Speech from 'expo-speech';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { KidConfig, Message } from '@mello/shared';
 import { MelloBlocker } from '../../modules/mello-blocker';
-import { kidApi } from './api';
+import { isUnpaired, kidApi } from './api';
 import { readJson, writeJson } from './cache';
 
 const CONFIG_CACHE = 'kid-config';
@@ -31,6 +31,7 @@ export async function syncKid(token: string, opts: { uploadDevice?: boolean } = 
     applyRules(config);
     return config;
   } catch (err) {
+    if (isUnpaired(err)) throw err;
     console.warn('[sync] using cached config', err);
     const cached = cachedConfig();
     if (cached) applyRules(cached);
@@ -41,6 +42,13 @@ export async function syncKid(token: string, opts: { uploadDevice?: boolean } = 
 function applyRules(config: KidConfig) {
   const blocked = new Set(config.rules.filter((r) => r.enabled).flatMap((r) => r.apps));
   MelloBlocker.setBlockedPackages([...blocked]);
+}
+
+/** Turns the gate off and forgets this kid's data. Call only after the backend has signed the phone out. */
+export function clearKidDevice() {
+  MelloBlocker.setBlockedPackages([]);
+  writeJson(CONFIG_CACHE, null);
+  writeJson('progress', {});
 }
 
 async function registerForPush(): Promise<string | null> {

@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { publicApi } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { Button, Card, ErrorText, Field, Muted, Screen, Title } from '@/components/ui';
 
 export default function Welcome() {
-  const { signIn } = useSession();
+  const { session, signIn } = useSession();
   const [mode, setMode] = useState<'choose' | 'parent' | 'kid'>('choose');
   const [familyName, setFamilyName] = useState('');
   const [code, setCode] = useState('');
@@ -13,12 +13,14 @@ export default function Welcome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
+  if (session) return <Redirect href="/" />;
+
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError(null);
     try {
+      // The root layout moves to the right home screen once the session changes.
       await fn();
-      router.replace('/');
     } catch (e) {
       setError(e);
     } finally {

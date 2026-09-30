@@ -50,6 +50,7 @@ export type Report = {
   minutesByDay: { day: string; minutes: number }[];
   unlocksByApp: { app: string; unlocks: number }[];
 };
+export type UnpairRequest = { id: string; kidId: string; kidName: string; createdAt: string };
 export type AgentTurn = { role: 'user' | 'assistant'; content: string };
 export type AgentAction = { tool: string; ok: boolean; summary: string };
 
@@ -60,7 +61,10 @@ export const publicApi = {
 };
 
 export const parentApi = (token: string) => ({
-  family: () => request<{ id: string; name: string; pairingCode: string }>('GET', '/parent/family', token),
+  family: () => request<{ id: string; name: string; pairingCode: string; hasPassword: boolean }>('GET', '/parent/family', token),
+  setPassword: (password: string) => request<{ ok: true }>('PUT', '/parent/password', token, { password }),
+  unpairRequests: () => request<UnpairRequest[]>('GET', '/parent/unpair-requests', token),
+  decideUnpair: (id: string, approve: boolean) => request<{ ok: true }>('POST', `/parent/unpair-requests/${id}`, token, { approve }),
   kids: () => request<Kid[]>('GET', '/parent/kids', token),
   rules: (kidId: string) => request<Rule[]>('GET', `/parent/kids/${kidId}/rules`, token),
   addRule: (kidId: string, input: Partial<RuleInput> & Pick<RuleInput, 'apps' | 'minutesRequired'>) =>
@@ -94,4 +98,10 @@ export const kidApi = (token: string) => ({
     request<{ ok: true }>('POST', '/kid/sessions', token, s),
   unplayedMessages: () => request<Message[]>('GET', '/kid/me/messages?unplayed=1', token),
   markPlayed: (id: string) => request<{ ok: boolean }>('POST', `/kid/me/messages/${id}/played`, token),
+  unpairWithPassword: (password: string) => request<void>('POST', '/kid/unpair', token, { password }),
+  requestUnpair: () => request<{ id: string; status: 'pending' }>('POST', '/kid/unpair-requests', token),
+  unpairStatus: (id: string) => request<{ status: 'pending' | 'approved' | 'denied' }>('GET', `/kid/unpair-requests/${id}`, token),
 });
+
+/** The backend revoked this kid phone (a parent approved sign-out or the password was entered). */
+export const isUnpaired = (err: unknown) => err instanceof ApiError && err.code === 'device_unpaired';

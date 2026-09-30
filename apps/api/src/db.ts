@@ -80,8 +80,32 @@ export function openDb(path = process.env.DATABASE_PATH ?? './data/mello.db'): D
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       played_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS unpair_requests (
+      id TEXT PRIMARY KEY,
+      kid_id TEXT NOT NULL REFERENCES kids(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      decided_at TEXT
+    );
   `);
+  migrate(db);
   return db;
+}
+
+/** Columns added after v0.1. SQLite has no ADD COLUMN IF NOT EXISTS, so check first. */
+function migrate(db: DatabaseSync) {
+  const addColumn = (table: string, column: string, type: string) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  };
+  // scrypt hash of the password a kid's phone needs to sign out ("salt:hash", hex).
+  addColumn('families', 'parent_password', 'TEXT');
+  // A signed-out phone keeps its history but its token stops working.
+  addColumn('kids', 'revoked_at', 'TEXT');
+  // Brute-force guard for the sign-out password.
+  addColumn('kids', 'unpair_failures', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('kids', 'unpair_locked_until', 'INTEGER');
 }
 
 export const newId = () => randomUUID();

@@ -17,6 +17,17 @@ import { newId } from './db.ts';
 type ParentEnv = { Variables: { familyId: string } };
 type KidEnv = { Variables: { kidId: string; familyId: string } };
 
+/** HTTPException plus a machine-readable code the phone can branch on. */
+class CodedError extends HTTPException {
+  constructor(
+    status: 400 | 401 | 403 | 404 | 409 | 429,
+    message: string,
+    readonly code: string,
+  ) {
+    super(status, { message });
+  }
+}
+
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './data/audio';
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
@@ -34,6 +45,7 @@ export function createApp(db: DatabaseSync) {
   const kidAuth = createMiddleware<KidEnv>(async (c, next) => {
     const kid = repo.kidByToken(bearer(c));
     if (!kid) throw new HTTPException(401, { message: 'Device token required' });
+    if (kid.revoked_at) throw new CodedError(401, 'This phone was signed out of Mello', 'device_unpaired');
     c.set('kidId', kid.id);
     c.set('familyId', kid.family_id);
     await next();
@@ -46,6 +58,7 @@ export function createApp(db: DatabaseSync) {
   const baseUrl = (c: Context) => process.env.PUBLIC_URL ?? new URL(c.req.url).origin;
 
   app.onError((err, c) => {
+    if (err instanceof CodedError) return c.json({ error: err.message, code: err.code }, err.status);
     if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
     if (err instanceof LlmUnavailableError) return c.json({ error: err.message, code: 'llm_unavailable' }, 503);
     // Token Factory refused or failed (bad key, no access to the model, outage): the phone falls back to time-only.
@@ -82,7 +95,21 @@ export function createApp(db: DatabaseSync) {
 
   parent.get('/family', (c) => {
     const f = repo.familyByToken(bearer(c))!;
-    return c.json({ id: f.id, name: f.name, pairingCode: f.pairing_code });
+    return c.json({ id: f.id, name: f.name, pairingCode: f.pairing_code, hasPassword: !!f.has_password });
+  });
+
+  // Password a kid's phone must enter to sign out. A PIN is fine; the phone side is rate-limited.
+  parent.put('/password', async (c) => {
+    const { password } = await body(c, z.object({ password: z.string().min(4).max(100) }));
+    repo.setParentPassword(c.get('familyId'), password);
+    return c.json({ ok: true });
+  });
+  parent.get('/unpair-requests', (c) => c.json(repo.pendingUnpairRequests(c.get('familyId'))));
+  parent.post('/unpair-requests/:id', async (c) => {
+    const { approve } = await body(c, z.object({ approve: z.boolean() }));
+    if (!repo.decideUnpairRequest(c.get('familyId'), c.req.param('id'), approve))
+      throw new HTTPException(404, { message: 'Request not found or already decided' });
+    return c.json({ ok: true });
   });
   parent.get('/kids', (c) => c.json(repo.listKids(c.get('familyId'))));
   parent.get('/kids/:kidId/rules', (c) => c.json(repo.listRules(kidParam(c).id)));
@@ -149,6 +176,23 @@ export function createApp(db: DatabaseSync) {
     );
     repo.updateDevice(c.get('kidId'), pushToken, installedApps);
     return c.json({ ok: true });
+  });
+
+  // ----- signing this phone out (needs the parent) -----
+  kid.post('/unpair', async (c) => {
+    const { password } = await body(c, z.object({ password: z.string().min(1).max(100) }));
+    const result = repo.tryUnpairWithPassword(c.get('kidId'), password);
+    if (result === 'no-password') throw new CodedError(409, 'Your parent has not set a sign-out password yet', 'no_password');
+    if (result === 'locked') throw new CodedError(429, 'Too many wrong tries. Wait 15 minutes or ask your parent to approve.', 'locked');
+    if (result === 'wrong') throw new CodedError(403, 'That password is not right', 'wrong_password');
+    return c.body(null, 204);
+  });
+  kid.post('/unpair-requests', (c) => c.json(repo.requestUnpair(c.get('kidId')), 201));
+  // Once approved the token is revoked, so the phone sees 401 device_unpaired here and signs out.
+  kid.get('/unpair-requests/:id', (c) => {
+    const status = repo.unpairRequestStatus(c.get('kidId'), c.req.param('id'));
+    if (!status) throw new HTTPException(404, { message: 'Request not found' });
+    return c.json({ status });
   });
 
   kid.get('/me/config', (c) => {

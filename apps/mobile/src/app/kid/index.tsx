@@ -4,12 +4,14 @@ import { router, useFocusEffect } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import type { KidConfig, Message } from '@mello/shared';
 import { MelloBlocker } from '../../../modules/mello-blocker';
-import { useKidSession } from '@/lib/session';
-import { cachedConfig, playPendingMessages, syncKid } from '@/lib/kid';
+import { useKidSession, useSession } from '@/lib/session';
+import { isUnpaired } from '@/lib/api';
+import { cachedConfig, clearKidDevice, playPendingMessages, syncKid } from '@/lib/kid';
 import { Button, Card, colors, Label, Muted, Screen, Title } from '@/components/ui';
 
 export default function KidHome() {
   const session = useKidSession();
+  const { signOut } = useSession();
   const [config, setConfig] = useState<KidConfig | null>(() => cachedConfig());
   const [gateOn, setGateOn] = useState(() => MelloBlocker.isServiceEnabled());
   const [nowPlaying, setNowPlaying] = useState<Message | null>(null);
@@ -21,12 +23,21 @@ export default function KidHome() {
   const refresh = useCallback(
     async (uploadDevice = false) => {
       setGateOn(MelloBlocker.isServiceEnabled());
-      const c = await syncKid(session.token, { uploadDevice });
-      if (c) setConfig(c);
+      try {
+        const c = await syncKid(session.token, { uploadDevice });
+        if (c) setConfig(c);
+      } catch (err) {
+        // A parent signed this phone out (e.g. approved a request after the kid closed the screen).
+        if (isUnpaired(err)) {
+          clearKidDevice();
+          await signOut();
+          return;
+        }
+      }
       await playPendingMessages(session.token, setNowPlaying);
       setNowPlaying(null);
     },
-    [session.token],
+    [session.token, signOut],
   );
 
   // First launch: share installed apps and push token with the parent.
@@ -96,6 +107,8 @@ export default function KidHome() {
           {blockedCount === 1 ? '1 app needs' : `${blockedCount} apps need`} a little reading first.
         </Muted>
       )}
+
+      <Button title="Sign out of Mello" variant="secondary" onPress={() => router.push('/kid/signout')} />
     </Screen>
   );
 }

@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Book, BookInput, GeneratedChallenge, BookWithText, InstalledApp, Kid, Message, Rule, RuleInput } from '@mello/shared';
 import { newId, newPairingCode, newToken } from './db.ts';
+import { hashPassword, verifyPassword } from './password.ts';
 
 type Row = Record<string, any>;
 
@@ -42,7 +43,7 @@ export class Repo {
     return family;
   }
   familyByToken(token: string) {
-    return this.db.prepare('SELECT id, name, pairing_code FROM families WHERE parent_token = ?').get(token) as Row | undefined;
+    return this.db.prepare('SELECT id, name, pairing_code, parent_password IS NOT NULL AS has_password FROM families WHERE parent_token = ?').get(token) as Row | undefined;
   }
   pairKid(code: string, kidName: string) {
     const family = this.db.prepare('SELECT id FROM families WHERE pairing_code = ?').get(code) as Row | undefined;
@@ -56,18 +57,77 @@ export class Repo {
   kidByToken(token: string) {
     return this.db.prepare('SELECT * FROM kids WHERE device_token = ?').get(token) as Row | undefined;
   }
+  setParentPassword(familyId: string, password: string) {
+    this.db.prepare('UPDATE families SET parent_password = ? WHERE id = ?').run(hashPassword(password), familyId);
+  }
+
+  // ----- signing a kid's phone out -----
+  static readonly MAX_UNPAIR_FAILURES = 5;
+  static readonly UNPAIR_LOCK_MS = 15 * 60_000;
+
+  /** Checks the parent password from the kid's phone. Five wrong tries lock it for 15 minutes. */
+  tryUnpairWithPassword(kidId: string, password: string, now = Date.now()): 'ok' | 'wrong' | 'locked' | 'no-password' {
+    const row = this.db
+      .prepare('SELECT k.unpair_failures, k.unpair_locked_until, f.parent_password FROM kids k JOIN families f ON f.id = k.family_id WHERE k.id = ?')
+      .get(kidId) as Row;
+    if (!row.parent_password) return 'no-password';
+    if (row.unpair_locked_until && row.unpair_locked_until > now) return 'locked';
+    if (!verifyPassword(password, row.parent_password)) {
+      const failures = row.unpair_failures + 1;
+      const locked = failures >= Repo.MAX_UNPAIR_FAILURES;
+      this.db
+        .prepare('UPDATE kids SET unpair_failures = ?, unpair_locked_until = ? WHERE id = ?')
+        .run(locked ? 0 : failures, locked ? now + Repo.UNPAIR_LOCK_MS : null, kidId);
+      return locked ? 'locked' : 'wrong';
+    }
+    this.revokeKid(kidId);
+    return 'ok';
+  }
+  revokeKid(kidId: string) {
+    this.db.prepare(`UPDATE kids SET revoked_at = datetime('now'), push_token = NULL WHERE id = ?`).run(kidId);
+    this.db.prepare(`UPDATE unpair_requests SET status = 'approved', decided_at = datetime('now') WHERE kid_id = ? AND status = 'pending'`).run(kidId);
+  }
+  /** Reuses a pending request so repeated taps don't flood the parent. */
+  requestUnpair(kidId: string) {
+    const pending = this.db.prepare(`SELECT id, status FROM unpair_requests WHERE kid_id = ? AND status = 'pending'`).get(kidId) as Row | undefined;
+    if (pending) return { id: pending.id as string, status: 'pending' as const };
+    const id = newId();
+    this.db.prepare('INSERT INTO unpair_requests (id, kid_id) VALUES (?, ?)').run(id, kidId);
+    return { id, status: 'pending' as const };
+  }
+  unpairRequestStatus(kidId: string, requestId: string) {
+    const r = this.db.prepare('SELECT status FROM unpair_requests WHERE id = ? AND kid_id = ?').get(requestId, kidId) as Row | undefined;
+    return (r?.status as 'pending' | 'approved' | 'denied' | undefined) ?? null;
+  }
+  pendingUnpairRequests(familyId: string) {
+    return this.db
+      .prepare(
+        `SELECT r.id, r.kid_id AS kidId, k.name AS kidName, r.created_at AS createdAt FROM unpair_requests r
+         JOIN kids k ON k.id = r.kid_id WHERE k.family_id = ? AND r.status = 'pending' AND k.revoked_at IS NULL ORDER BY r.created_at`,
+      )
+      .all(familyId) as { id: string; kidId: string; kidName: string; createdAt: string }[];
+  }
+  decideUnpairRequest(familyId: string, requestId: string, approve: boolean) {
+    const r = this.db
+      .prepare(`SELECT r.kid_id FROM unpair_requests r JOIN kids k ON k.id = r.kid_id WHERE r.id = ? AND k.family_id = ? AND r.status = 'pending'`)
+      .get(requestId, familyId) as Row | undefined;
+    if (!r) return false;
+    if (approve) this.revokeKid(r.kid_id);
+    else this.db.prepare(`UPDATE unpair_requests SET status = 'denied', decided_at = datetime('now') WHERE id = ?`).run(requestId);
+    return true;
+  }
 
   // ----- kids -----
   listKids(familyId: string): Kid[] {
-    return (this.db.prepare('SELECT * FROM kids WHERE family_id = ? ORDER BY created_at').all(familyId) as Row[]).map(toKid);
+    return (this.db.prepare('SELECT * FROM kids WHERE family_id = ? AND revoked_at IS NULL ORDER BY created_at').all(familyId) as Row[]).map(toKid);
   }
   getKid(familyId: string, kidId: string): Kid | null {
-    const r = this.db.prepare('SELECT * FROM kids WHERE id = ? AND family_id = ?').get(kidId, familyId) as Row | undefined;
+    const r = this.db.prepare('SELECT * FROM kids WHERE id = ? AND family_id = ? AND revoked_at IS NULL').get(kidId, familyId) as Row | undefined;
     return r ? toKid(r) : null;
   }
   findKidByName(familyId: string, name: string): Kid | null {
     const r = this.db
-      .prepare('SELECT * FROM kids WHERE family_id = ? AND lower(name) = lower(?)')
+      .prepare('SELECT * FROM kids WHERE family_id = ? AND revoked_at IS NULL AND lower(name) = lower(?)')
       .get(familyId, name.trim()) as Row | undefined;
     return r ? toKid(r) : null;
   }

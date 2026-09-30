@@ -178,3 +178,76 @@ describe('agent tools', () => {
     await expect(executeTool(repo, family.id, 'list_apps', { kid: 'Nobody' }, actions)).rejects.toThrow(/No kid named/);
   });
 });
+
+describe('signing a kid phone out', () => {
+  const setup = async () => {
+    const db = openDb(':memory:');
+    const app = createApp(db);
+    const call = async (method: string, path: string, token?: string, json?: unknown) => {
+      const res = await app.request(path, {
+        method,
+        headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: json === undefined ? undefined : JSON.stringify(json),
+      });
+      return { status: res.status, body: res.status === 204 ? null : await res.json() };
+    };
+    const family = (await call('POST', '/families', undefined, { name: 'Home' })).body;
+    const kid = (await call('POST', '/pair', undefined, { code: family.pairingCode, kidName: 'Sara' })).body;
+    return { call, family, kid };
+  };
+
+  it('needs a password to be set first', async () => {
+    const { call, kid } = await setup();
+    const res = await call('POST', '/kid/unpair', kid.deviceToken, { password: '1234' });
+    expect(res).toMatchObject({ status: 409, body: { code: 'no_password' } });
+  });
+
+  it('signs out with the right password and revokes the token', async () => {
+    const { call, family, kid } = await setup();
+    await call('PUT', '/parent/password', family.parentToken, { password: '4821' });
+    expect((await call('GET', '/parent/family', family.parentToken)).body.hasPassword).toBe(true);
+    expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: 'nope' })).body.code).toBe('wrong_password');
+    expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: '4821' })).status).toBe(204);
+
+    const after = await call('GET', '/kid/me/config', kid.deviceToken);
+    expect(after).toMatchObject({ status: 401, body: { code: 'device_unpaired' } });
+    expect((await call('GET', '/parent/kids', family.parentToken)).body).toHaveLength(0);
+  });
+
+  it('locks after five wrong passwords, even for the right one', async () => {
+    const { call, family, kid } = await setup();
+    await call('PUT', '/parent/password', family.parentToken, { password: '4821' });
+    for (let i = 0; i < 4; i++) expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: 'x' })).status).toBe(403);
+    expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: 'x' })).status).toBe(429);
+    expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: '4821' })).status).toBe(429);
+  });
+
+  it('signs out when the parent approves a request', async () => {
+    const { call, family, kid } = await setup();
+    const req = (await call('POST', '/kid/unpair-requests', kid.deviceToken)).body;
+    // Repeated taps reuse the same pending request.
+    expect((await call('POST', '/kid/unpair-requests', kid.deviceToken)).body.id).toBe(req.id);
+
+    const pending = (await call('GET', '/parent/unpair-requests', family.parentToken)).body;
+    expect(pending).toMatchObject([{ id: req.id, kidName: 'Sara' }]);
+    expect((await call('GET', `/kid/unpair-requests/${req.id}`, kid.deviceToken)).body.status).toBe('pending');
+
+    await call('POST', `/parent/unpair-requests/${req.id}`, family.parentToken, { approve: true });
+    expect((await call('GET', `/kid/unpair-requests/${req.id}`, kid.deviceToken)).body.code).toBe('device_unpaired');
+  });
+
+  it('keeps the phone paired when the parent denies', async () => {
+    const { call, family, kid } = await setup();
+    const req = (await call('POST', '/kid/unpair-requests', kid.deviceToken)).body;
+    await call('POST', `/parent/unpair-requests/${req.id}`, family.parentToken, { approve: false });
+    expect((await call('GET', `/kid/unpair-requests/${req.id}`, kid.deviceToken)).body.status).toBe('denied');
+    expect((await call('GET', '/kid/me/config', kid.deviceToken)).status).toBe(200);
+  });
+
+  it("won't let another family approve", async () => {
+    const { call, kid } = await setup();
+    const other = (await call('POST', '/families', undefined, { name: 'Other' })).body;
+    const req = (await call('POST', '/kid/unpair-requests', kid.deviceToken)).body;
+    expect((await call('POST', `/parent/unpair-requests/${req.id}`, other.parentToken, { approve: true })).status).toBe(404);
+  });
+});
