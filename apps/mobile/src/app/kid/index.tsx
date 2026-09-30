@@ -93,7 +93,7 @@ export default function KidHome() {
 
       {blockedCount > 0 && (
         <Muted>
-          {blockedCount} app{blockedCount === 1 ? '' : 's'} need a little reading first.
+          {blockedCount === 1 ? '1 app needs' : `${blockedCount} apps need`} a little reading first.
         </Muted>
       )}
     </Screen>

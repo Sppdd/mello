@@ -1,5 +1,5 @@
 import { GeneratedChallenge, isPassing, type ChallengeResult } from '@mello/shared';
-import { llm, MODEL } from './llm.ts';
+import { llm, LlmUnavailableError, MODEL } from './llm.ts';
 
 const SYSTEM = `You write short reading-comprehension checks for children.
 Given a passage the child just read, write 3 multiple-choice questions that can only be answered by someone who read it.
@@ -13,15 +13,39 @@ Reply with JSON only, in this shape:
 
 const MAX_PASSAGE_CHARS = 6000;
 
+// Structured output makes Token Factory constrain decoding to this shape. JSON mode alone
+// sometimes returned 5 choices or dropped answerIndex on longer passages.
+const CHALLENGE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['questions'],
+  properties: {
+    questions: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 3,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['question', 'choices', 'answerIndex'],
+        properties: {
+          question: { type: 'string' },
+          choices: { type: 'array', minItems: 4, maxItems: 4, items: { type: 'string' } },
+          answerIndex: { type: 'integer', minimum: 0, maximum: 3 },
+        },
+      },
+    },
+  },
+};
+
 export async function generateChallenge(passage: string, age: number | null): Promise<GeneratedChallenge> {
   const user = `Child's age: ${age ?? 'about 9'}\n\nPassage:\n"""\n${passage.slice(-MAX_PASSAGE_CHARS)}\n"""`;
   let lastError: unknown;
-  // Models occasionally return malformed JSON; one retry fixes almost all of it.
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     const res = await llm().chat.completions.create({
       model: MODEL,
       temperature: 0.4,
-      response_format: { type: 'json_object' },
+      response_format: { type: 'json_schema', json_schema: { name: 'reading_challenge', strict: true, schema: CHALLENGE_SCHEMA } },
       messages: [
         { role: 'system', content: SYSTEM },
         { role: 'user', content: user },
@@ -33,7 +57,7 @@ export async function generateChallenge(passage: string, age: number | null): Pr
       lastError = err;
     }
   }
-  throw new Error(`Model returned an invalid challenge: ${String(lastError)}`);
+  throw new LlmUnavailableError(`Model returned an invalid challenge: ${String(lastError).slice(0, 300)}`);
 }
 
 /** Strips ```json fences some models add even in JSON mode. */

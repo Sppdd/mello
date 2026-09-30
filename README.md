@@ -52,7 +52,7 @@ Push notifications need an EAS project id (`npx eas-cli init`). Until you set on
 | Reading quiz | `POST /kid/challenges` | Chat completion in JSON mode, validated with zod and retried once |
 | Agent | `POST /parent/agent/chat` | Tool-calling loop (list kids/apps/books, set rules, assign books, send messages, reports) |
 
-The model is configurable with `NEBIUS_MODEL` (default `meta-llama/Llama-3.3-70B-Instruct`; it must support tool calling). If the API key is missing or Token Factory is down, the quiz is skipped and reading time alone unlocks the app, so a kid is never stuck.
+The model is configurable with `NEBIUS_MODEL` (default `Qwen/Qwen3-235B-A22B-Instruct-2507`; it must support tool calling). If the API key is missing or Token Factory is down, the quiz is skipped and reading time alone unlocks the app, so a kid is never stuck.
 
 ## Safety
 - The phone app, dialer, emergency and Settings apps can never be blocked.

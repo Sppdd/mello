@@ -125,6 +125,31 @@ describe('HTTP API', () => {
     expect((await call('GET', '/kid/me/messages?unplayed=1', kid.deviceToken)).body).toHaveLength(0);
   });
 
+  it('grades a stored challenge once, without leaking answers beforehand', async () => {
+    const db = openDb(':memory:');
+    const app = createApp(db);
+    const repo = new Repo(db);
+    const family = repo.createFamily('Home');
+    const kid = repo.pairKid(family.pairingCode, 'Sara')!;
+    const id = repo.saveChallenge(kid.id, null, {
+      questions: [
+        { question: 'Who?', choices: ['a', 'b', 'c', 'd'], answerIndex: 1 },
+        { question: 'Where?', choices: ['a', 'b', 'c', 'd'], answerIndex: 2 },
+        { question: 'Why?', choices: ['a', 'b', 'c', 'd'], answerIndex: 0 },
+      ],
+    });
+    const answer = (answers: number[]) =>
+      app.request(`/kid/challenges/${id}/answers`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${kid.deviceToken}` },
+        body: JSON.stringify({ answers }),
+      });
+    const res = await answer([1, 2, 3]);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ passed: true, correct: 2, total: 3 });
+    expect((await answer([1, 2, 0])).status).toBe(409);
+  });
+
   it('returns 503 for challenges when the LLM key is missing', async () => {
     const saved = process.env.NEBIUS_API_KEY;
     delete process.env.NEBIUS_API_KEY;

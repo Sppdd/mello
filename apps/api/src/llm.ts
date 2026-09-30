@@ -5,7 +5,7 @@ import OpenAI from 'openai';
 export const TOKEN_FACTORY_BASE_URL = process.env.NEBIUS_BASE_URL ?? 'https://api.tokenfactory.nebius.com/v1/';
 
 /** Model for questions and the agent. Must support tool calling. Override with NEBIUS_MODEL. */
-export const MODEL = process.env.NEBIUS_MODEL ?? 'meta-llama/Llama-3.3-70B-Instruct';
+export const MODEL = process.env.NEBIUS_MODEL ?? 'Qwen/Qwen3-235B-A22B-Instruct-2507';
 
 let client: OpenAI | null = null;
 

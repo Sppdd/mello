@@ -1,3 +1,4 @@
+import OpenAI from 'openai';
 import { Hono, type Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { createMiddleware } from 'hono/factory';
@@ -47,6 +48,11 @@ export function createApp(db: DatabaseSync) {
   app.onError((err, c) => {
     if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
     if (err instanceof LlmUnavailableError) return c.json({ error: err.message, code: 'llm_unavailable' }, 503);
+    // Token Factory refused or failed (bad key, no access to the model, outage): the phone falls back to time-only.
+    if (err instanceof OpenAI.APIError) {
+      console.error(`[llm] ${err.status} ${err.message}`);
+      return c.json({ error: `AI service error (${err.status ?? 'network'})`, code: 'llm_unavailable' }, 503);
+    }
     console.error(err);
     return c.json({ error: 'Internal error' }, 500);
   });
@@ -173,10 +179,10 @@ export function createApp(db: DatabaseSync) {
 
   kid.post('/challenges/:id/answers', async (c) => {
     const { answers } = await body(c, z.object({ answers: z.array(z.number().int().min(0).max(3)).max(3) }));
-    const challenge = repo.getChallenge(c.get('kidId'), c.req.param('id'));
-    if (!challenge) throw new HTTPException(404, { message: 'Challenge not found' });
-    if (challenge.result) throw new HTTPException(409, { message: 'Already answered' });
-    const result = grade(challenge, answers);
+    const stored = repo.getChallenge(c.get('kidId'), c.req.param('id'));
+    if (!stored) throw new HTTPException(404, { message: 'Challenge not found' });
+    if (stored.result) throw new HTTPException(409, { message: 'Already answered' });
+    const result = grade(stored.challenge, answers);
     repo.setChallengeResult(c.req.param('id'), result);
     return c.json(result);
   });

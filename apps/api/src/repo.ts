@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Book, BookInput, BookWithText, InstalledApp, Kid, Message, Rule, RuleInput } from '@mello/shared';
+import type { Book, BookInput, GeneratedChallenge, BookWithText, InstalledApp, Kid, Message, Rule, RuleInput } from '@mello/shared';
 import { newId, newPairingCode, newToken } from './db.ts';
 
 type Row = Record<string, any>;
@@ -121,14 +121,15 @@ export class Repo {
   }
 
   // ----- challenges & sessions -----
-  saveChallenge(kidId: string, bookId: string | null, questions: unknown) {
+  /** Stores the full generated challenge, answers included; only the server ever sees answerIndex. */
+  saveChallenge(kidId: string, bookId: string | null, challenge: GeneratedChallenge) {
     const id = newId();
-    this.db.prepare('INSERT INTO challenges (id, kid_id, book_id, questions) VALUES (?, ?, ?, ?)').run(id, kidId, bookId, JSON.stringify(questions));
+    this.db.prepare('INSERT INTO challenges (id, kid_id, book_id, questions) VALUES (?, ?, ?, ?)').run(id, kidId, bookId, JSON.stringify(challenge));
     return id;
   }
   getChallenge(kidId: string, id: string) {
     const r = this.db.prepare('SELECT * FROM challenges WHERE id = ? AND kid_id = ?').get(id, kidId) as Row | undefined;
-    return r ? { questions: JSON.parse(r.questions), result: r.result ? JSON.parse(r.result) : null } : null;
+    return r ? { challenge: JSON.parse(r.questions) as GeneratedChallenge, result: r.result ? JSON.parse(r.result) : null } : null;
   }
   setChallengeResult(id: string, result: unknown) {
     this.db.prepare('UPDATE challenges SET result = ? WHERE id = ?').run(JSON.stringify(result), id);
