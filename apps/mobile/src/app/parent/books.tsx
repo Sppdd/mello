@@ -7,8 +7,8 @@ import { SAMPLE_BOOK } from '@/lib/sampleBook';
 import { Button, Card, ErrorText, Field, Label, Muted, Screen, Title } from '@/components/ui';
 
 export default function Books() {
-  const session = useParentSession();
-  const api = useMemo(() => parentApi(session.token), [session.token]);
+  useParentSession();
+  const api = useMemo(() => parentApi(), []);
   const [books, setBooks] = useState<Book[]>([]);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');

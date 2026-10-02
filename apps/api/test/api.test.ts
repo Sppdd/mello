@@ -1,15 +1,20 @@
-import { describe, expect, it } from 'vitest';
-import { evaluateGate, GeneratedChallenge, isPassing, paginate, type Rule } from '@mello/shared';
-import { openDb } from '../src/db.ts';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { evaluateGate, GeneratedChallenge, inQuietHours, isPassing, minutesLeft, paginate, TaskInput, youtubeId, type Rule } from '@mello/shared';
+import { openDb, type Db } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
 import { Repo } from '../src/repo.ts';
 import { executeTool, type AgentAction } from '../src/agent.ts';
 import { extractJson, grade } from '../src/challenge.ts';
 
+// ---------- pure logic ----------
+
 const rule = (over: Partial<Rule> = {}): Rule => ({
   id: 'r1',
   kidId: 'k1',
   apps: ['com.instagram.android'],
+  activity: 'reading',
+  taskId: null,
   minutesRequired: 5,
   unlockMinutes: 30,
   enabled: true,
@@ -18,7 +23,7 @@ const rule = (over: Partial<Rule> = {}): Rule => ({
 
 describe('evaluateGate', () => {
   it('blocks covered apps', () => {
-    expect(evaluateGate([rule()], 'com.instagram.android', {})).toMatchObject({ blocked: true });
+    expect(evaluateGate([rule()], 'com.instagram.android', {})).toMatchObject({ blocked: true, reason: 'rule' });
   });
   it('lets through apps no rule covers', () => {
     expect(evaluateGate([rule()], 'com.whatsapp', {})).toEqual({ blocked: false, reason: 'not-covered' });
@@ -31,9 +36,26 @@ describe('evaluateGate', () => {
   it('never blocks the dialer, even if a parent adds it', () => {
     expect(evaluateGate([rule({ apps: ['com.google.android.dialer'] })], 'com.google.android.dialer', {}).blocked).toBe(false);
   });
-  it('ignores disabled rules and picks the strictest rule', () => {
+  it('ignores disabled rules, prefers task rules, else the strictest reading rule', () => {
     const d = evaluateGate([rule({ minutesRequired: 1 }), rule({ id: 'r2', minutesRequired: 10 }), rule({ id: 'r3', minutesRequired: 60, enabled: false })], 'com.instagram.android', {});
-    expect(d.blocked && d.rule.id).toBe('r2');
+    expect(d.blocked && d.reason === 'rule' && d.rule.id).toBe('r2');
+    const t = evaluateGate([rule({ minutesRequired: 60 }), rule({ id: 't', activity: 'task', taskId: 'x', minutesRequired: 5 })], 'com.instagram.android', {});
+    expect(t.blocked && t.reason === 'rule' && t.rule.id).toBe('t');
+  });
+  it('blocks everything but allowed apps at bedtime, across midnight', () => {
+    const q = { enabled: true, startMinute: 21 * 60, endMinute: 7 * 60, allowedApps: ['com.audible'] };
+    const at = (h: number, m = 0) => new Date(2026, 0, 1, h, m).getTime();
+    expect(evaluateGate({ rules: [], quietHours: q }, 'com.whatsapp', {}, at(22)).blocked).toBe(true);
+    expect(evaluateGate({ rules: [], quietHours: q }, 'com.whatsapp', {}, at(6, 59)).blocked).toBe(true);
+    expect(evaluateGate({ rules: [], quietHours: q }, 'com.whatsapp', {}, at(7)).blocked).toBe(false);
+    expect(evaluateGate({ rules: [], quietHours: q }, 'com.audible', {}, at(23)).blocked).toBe(false);
+    expect(inQuietHours({ ...q, enabled: false }, 22 * 60)).toBe(false);
+  });
+  it('blocks an app once its daily limit is used, even if unlocked', () => {
+    const ctx = { rules: [rule()], limits: [{ packageName: 'com.instagram.android', dailyMinutes: 30 }], usageToday: { 'com.instagram.android': 30 } };
+    expect(evaluateGate(ctx, 'com.instagram.android', { 'com.instagram.android': Date.now() + 60_000 })).toMatchObject({ blocked: true, reason: 'limit' });
+    expect(minutesLeft(ctx.limits, { 'com.instagram.android': 12 }, 'com.instagram.android')).toBe(18);
+    expect(minutesLeft(ctx.limits, {}, 'com.other')).toBeNull();
   });
 });
 
@@ -59,55 +81,90 @@ describe('challenges', () => {
   });
 });
 
-describe('paginate', () => {
-  it('keeps paragraphs whole and splits long text', () => {
-    const para = Array(100).fill('word').join(' ');
-    const pages = paginate([para, para, para].join('\n\n'), 180);
-    expect(pages).toHaveLength(3);
+describe('tasks input', () => {
+  it('parses YouTube ids from the usual link shapes', () => {
+    expect(youtubeId('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10')).toBe('dQw4w9WgXcQ');
+    expect(youtubeId('https://youtu.be/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(youtubeId('https://youtube.com/shorts/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(youtubeId('https://vimeo.com/123')).toBeNull();
+  });
+  it('requires URLs where needed and YouTube for videos', () => {
+    expect(TaskInput.safeParse({ kind: 'video', title: 'x', url: 'https://vimeo.com/1', requiredMinutes: 5 }).success).toBe(false);
+    expect(TaskInput.safeParse({ kind: 'article', title: 'x', requiredMinutes: 5 }).success).toBe(false);
+    expect(TaskInput.safeParse({ kind: 'reading', title: 'x', requiredMinutes: 5 }).success).toBe(true);
+    expect(TaskInput.safeParse({ kind: 'audio', title: 'x', url: 'javascript:alert(1)', requiredMinutes: 5 }).success).toBe(false);
   });
 });
 
-describe('HTTP API', () => {
-  const setup = async () => {
-    const app = createApp(openDb(':memory:'));
-    const call = async (method: string, path: string, token?: string, json?: unknown) => {
-      const res = await app.request(path, {
-        method,
-        headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
-        body: json === undefined ? undefined : JSON.stringify(json),
-      });
-      return { status: res.status, body: res.status === 204 ? null : await res.json() };
-    };
-    const family = (await call('POST', '/families', undefined, { name: 'Home' })).body;
-    const kid = (await call('POST', '/pair', undefined, { code: family.pairingCode, kidName: 'Sara' })).body;
-    return { call, family, kid };
+describe('paginate', () => {
+  it('keeps paragraphs whole and splits long text', () => {
+    const para = Array(100).fill('word').join(' ');
+    expect(paginate([para, para, para].join('\n\n'), 180)).toHaveLength(3);
+  });
+});
+
+// ---------- HTTP API on a real Postgres (PGlite) ----------
+
+let db: Db;
+beforeAll(async () => {
+  db = await openDb({ pglitePath: 'memory://' });
+});
+afterAll(async () => {
+  await db.close();
+});
+
+/** Parent tokens in tests are "parent:<uuid>"; production verifies Supabase JWTs instead. */
+const fakeVerifier = async (token: string) => (token.startsWith('parent:') ? token.slice(7) : null);
+
+async function setup() {
+  const app = createApp(db, { verifyParentToken: fakeVerifier });
+  const call = async (method: string, path: string, token?: string, json?: unknown) => {
+    const res = await app.request(path, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: json === undefined ? undefined : JSON.stringify(json),
+    });
+    return { status: res.status, body: res.status === 204 ? null : await res.json() };
   };
+  const parentToken = `parent:${randomUUID()}`;
+  const family = (await call('POST', '/parent/family', parentToken, { name: 'Home' })).body;
+  const kid = (await call('POST', '/pair', undefined, { code: family.pairingCode, kidName: 'Sara' })).body;
+  return { app, call, parentToken, family, kid };
+}
+
+describe('HTTP API', () => {
+  it('needs a signed-in parent, and a family before anything else', async () => {
+    const { call } = await setup();
+    expect((await call('GET', '/parent/kids')).status).toBe(401);
+    const fresh = `parent:${randomUUID()}`;
+    expect((await call('GET', '/parent/kids', fresh)).body.code).toBe('no_family');
+    expect((await call('POST', '/parent/family', fresh, { name: 'X' })).status).toBe(201);
+    expect((await call('POST', '/parent/family', fresh, { name: 'Y' })).body.code).toBe('family_exists');
+  });
 
   it('pairs a kid, sets a rule and delivers it to the kid config', async () => {
-    const { call, family, kid } = await setup();
+    const { call, parentToken, kid } = await setup();
     await call('PUT', '/kid/me/device', kid.deviceToken, {
-      pushToken: null,
       installedApps: [{ packageName: 'com.zhiliaoapp.musically', label: 'TikTok' }],
+      status: { gateEnabled: true },
     });
-    const created = await call('POST', `/parent/kids/${kid.kidId}/rules`, family.parentToken, {
-      apps: ['com.zhiliaoapp.musically'],
-      minutesRequired: 5,
-    });
+    const created = await call('POST', `/parent/kids/${kid.kidId}/rules`, parentToken, { apps: ['com.zhiliaoapp.musically'], minutesRequired: 5 });
     expect(created.status).toBe(201);
-    expect(created.body.unlockMinutes).toBe(30);
+    expect(created.body).toMatchObject({ unlockMinutes: 30, activity: 'reading' });
 
-    const config = await call('GET', '/kid/me/config', kid.deviceToken);
+    const config = await call('GET', '/kid/me/config?day=2026-09-30', kid.deviceToken);
     expect(config.body.rules).toHaveLength(1);
     expect(config.body.kid.installedApps[0].label).toBe('TikTok');
+    expect(config.body.kid.settings).toEqual({ location: false, photoProof: false, attentionChecks: true });
   });
 
   it('keeps parent and kid tokens apart, and families apart', async () => {
-    const { call, family, kid } = await setup();
-    expect((await call('GET', '/kid/me/config', family.parentToken)).status).toBe(401);
+    const { call, parentToken, kid } = await setup();
+    expect((await call('GET', '/kid/me/config', parentToken)).status).toBe(401);
     expect((await call('GET', '/parent/kids', kid.deviceToken)).status).toBe(401);
-
-    const other = (await call('POST', '/families', undefined, { name: 'Other' })).body;
-    expect((await call('GET', `/parent/kids/${kid.kidId}/rules`, other.parentToken)).status).toBe(404);
+    const other = (await setup()).parentToken;
+    expect((await call('GET', `/parent/kids/${kid.kidId}/rules`, other)).status).toBe(404);
+    expect((await call('GET', `/parent/kids/not-a-uuid/rules`, parentToken)).status).toBe(404);
   });
 
   it('rejects a bad pairing code', async () => {
@@ -116,8 +173,8 @@ describe('HTTP API', () => {
   });
 
   it('sends a text message that the kid can list and mark played', async () => {
-    const { call, family, kid } = await setup();
-    await call('POST', `/parent/kids/${kid.kidId}/messages`, family.parentToken, { text: 'Dinner in 10 minutes!' });
+    const { call, parentToken, kid } = await setup();
+    await call('POST', `/parent/kids/${kid.kidId}/messages`, parentToken, { text: 'Dinner in 10 minutes!' });
     const unplayed = await call('GET', '/kid/me/messages?unplayed=1', kid.deviceToken);
     expect(unplayed.body).toHaveLength(1);
     expect(unplayed.body[0]).toMatchObject({ kind: 'tts', text: 'Dinner in 10 minutes!' });
@@ -125,129 +182,153 @@ describe('HTTP API', () => {
     expect((await call('GET', '/kid/me/messages?unplayed=1', kid.deviceToken)).body).toHaveLength(0);
   });
 
-  it('grades a stored challenge once, without leaking answers beforehand', async () => {
-    const db = openDb(':memory:');
-    const app = createApp(db);
+  it('grades a stored challenge once', async () => {
     const repo = new Repo(db);
-    const family = repo.createFamily('Home');
-    const kid = repo.pairKid(family.pairingCode, 'Sara')!;
-    const id = repo.saveChallenge(kid.id, null, {
+    const { call, kid } = await setup();
+    const id = await repo.saveChallenge(kid.kidId, null, {
       questions: [
         { question: 'Who?', choices: ['a', 'b', 'c', 'd'], answerIndex: 1 },
         { question: 'Where?', choices: ['a', 'b', 'c', 'd'], answerIndex: 2 },
         { question: 'Why?', choices: ['a', 'b', 'c', 'd'], answerIndex: 0 },
       ],
     });
-    const answer = (answers: number[]) =>
-      app.request(`/kid/challenges/${id}/answers`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${kid.deviceToken}` },
-        body: JSON.stringify({ answers }),
-      });
-    const res = await answer([1, 2, 3]);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ passed: true, correct: 2, total: 3 });
-    expect((await answer([1, 2, 0])).status).toBe(409);
+    const res = await call('POST', `/kid/challenges/${id}/answers`, kid.deviceToken, { answers: [1, 2, 3] });
+    expect(res.body).toMatchObject({ passed: true, correct: 2, total: 3 });
+    expect((await call('POST', `/kid/challenges/${id}/answers`, kid.deviceToken, { answers: [1, 2, 0] })).status).toBe(409);
   });
 
   it('returns 503 for challenges when the LLM key is missing', async () => {
     const saved = process.env.NEBIUS_API_KEY;
     delete process.env.NEBIUS_API_KEY;
     const { call, kid } = await setup();
-    const res = await call('POST', '/kid/challenges', kid.deviceToken, { bookId: null, passage: 'x'.repeat(200) });
-    expect(res.status).toBe(503);
+    expect((await call('POST', '/kid/challenges', kid.deviceToken, { bookId: null, passage: 'x'.repeat(200) })).status).toBe(503);
     process.env.NEBIUS_API_KEY = saved;
   });
 });
 
-describe('agent tools', () => {
-  it('sets a rule by kid name and refuses apps not on the phone', async () => {
-    const repo = new Repo(openDb(':memory:'));
-    const family = repo.createFamily('Home');
-    const kid = repo.pairKid(family.pairingCode, 'Sara')!;
-    repo.updateDevice(kid.id, null, [{ packageName: 'com.instagram.android', label: 'Instagram' }]);
-    const actions: AgentAction[] = [];
+describe('tasks, limits and bedtime', () => {
+  it('tracks task progress in small increments and completes at the required time', async () => {
+    const { call, parentToken, kid } = await setup();
+    const task = (await call('POST', `/parent/kids/${kid.kidId}/tasks`, parentToken, {
+      kind: 'video', title: 'Fractions', url: 'https://youtu.be/dQw4w9WgXcQ', requiredMinutes: 2,
+    })).body;
+    const day = '2026-09-30';
+    expect((await call('POST', `/kid/tasks/${task.id}/progress`, kid.deviceToken, { day, seconds: 301 })).status).toBe(400);
+    expect((await call('POST', `/kid/tasks/${task.id}/progress`, kid.deviceToken, { day, seconds: 60 })).body).toMatchObject({ seconds: 60, completed: false });
+    expect((await call('POST', `/kid/tasks/${task.id}/progress`, kid.deviceToken, { day, seconds: 60 })).body).toMatchObject({ seconds: 120, completed: true });
 
-    const rule: any = await executeTool(repo, family.id, 'set_reading_rule', { kid: 'sara', apps: ['com.instagram.android'], minutes_required: 3 }, actions);
-    expect(rule.minutesRequired).toBe(3);
-    expect(actions[0]).toMatchObject({ ok: true });
+    const today = (await call('GET', `/kid/me/config?day=${day}`, kid.deviceToken)).body;
+    expect(today.taskProgress).toEqual([{ taskId: task.id, seconds: 120, completed: true }]);
+    // Daily tasks reset the next day.
+    const tomorrow = (await call('GET', '/kid/me/config?day=2026-10-01', kid.deviceToken)).body;
+    expect(tomorrow.taskProgress).toEqual([{ taskId: task.id, seconds: 0, completed: false }]);
+  });
 
-    await expect(
-      executeTool(repo, family.id, 'set_reading_rule', { kid: 'Sara', apps: ['com.made.up'], minutes_required: 3 }, actions),
-    ).rejects.toThrow(/Not installed/);
-    await expect(executeTool(repo, family.id, 'list_apps', { kid: 'Nobody' }, actions)).rejects.toThrow(/No kid named/);
+  it('lets a rule require a task, but only one of that kid', async () => {
+    const { call, parentToken, kid } = await setup();
+    const task = (await call('POST', `/parent/kids/${kid.kidId}/tasks`, parentToken, { kind: 'reading', title: 'Read', requiredMinutes: 10 })).body;
+    const ok = await call('POST', `/parent/kids/${kid.kidId}/rules`, parentToken, { apps: ['a.b'], activity: 'task', taskId: task.id, minutesRequired: 10 });
+    expect(ok.status).toBe(201);
+    expect((await call('POST', `/parent/kids/${kid.kidId}/rules`, parentToken, { apps: ['a.b'], activity: 'task', minutesRequired: 10 })).status).toBe(400);
+    const other = await setup();
+    const foreign = await other.call('POST', `/parent/kids/${other.kid.kidId}/rules`, other.parentToken, { apps: ['a.b'], activity: 'task', taskId: task.id, minutesRequired: 10 });
+    expect(foreign.status).toBe(404);
+  });
+
+  it('stores limits and bedtime and ships them in the kid config', async () => {
+    const { call, parentToken, kid } = await setup();
+    await call('PUT', `/parent/kids/${kid.kidId}/limits`, parentToken, { packageName: 'com.google.android.youtube', dailyMinutes: 45 });
+    await call('PUT', `/parent/kids/${kid.kidId}/limits`, parentToken, { packageName: 'com.google.android.youtube', dailyMinutes: 30 });
+    await call('PUT', `/parent/kids/${kid.kidId}/quiet-hours`, parentToken, { enabled: true, startMinute: 1260, endMinute: 420, allowedApps: [] });
+    const cfg = (await call('GET', '/kid/me/config', kid.deviceToken)).body;
+    expect(cfg.limits).toEqual([{ packageName: 'com.google.android.youtube', dailyMinutes: 30 }]);
+    expect(cfg.quietHours).toMatchObject({ startMinute: 1260, endMinute: 420 });
+  });
+
+  it('alerts the parent when a protection is switched off', async () => {
+    const { call, parentToken, kid } = await setup();
+    await call('PUT', '/kid/me/device', kid.deviceToken, { status: { gateEnabled: true } });
+    await call('PUT', '/kid/me/device', kid.deviceToken, { status: { gateEnabled: false } });
+    await call('PUT', '/kid/me/device', kid.deviceToken, { status: { gateEnabled: false } });
+    const alerts = (await call('GET', '/parent/alerts', parentToken)).body;
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({ kind: 'protection_off', kidName: 'Sara', detail: { protection: 'gateEnabled' } });
+    await call('POST', '/parent/alerts/seen', parentToken);
+    expect((await call('GET', '/parent/alerts', parentToken)).body).toHaveLength(0);
+  });
+
+  it('only accepts location when the parent turned it on', async () => {
+    const { call, parentToken, kid } = await setup();
+    const loc = { lat: 33.3, lng: 44.4, accuracyM: 12 };
+    expect((await call('POST', '/kid/location', kid.deviceToken, loc)).body.code).toBe('location_off');
+    await call('PATCH', `/parent/kids/${kid.kidId}/settings`, parentToken, { location: true });
+    expect((await call('POST', '/kid/location', kid.deviceToken, loc)).status).toBe(201);
+    expect((await call('GET', `/parent/kids/${kid.kidId}/location`, parentToken)).body).toMatchObject({ lat: 33.3, lng: 44.4 });
   });
 });
 
 describe('signing a kid phone out', () => {
-  const setup = async () => {
-    const db = openDb(':memory:');
-    const app = createApp(db);
-    const call = async (method: string, path: string, token?: string, json?: unknown) => {
-      const res = await app.request(path, {
-        method,
-        headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
-        body: json === undefined ? undefined : JSON.stringify(json),
-      });
-      return { status: res.status, body: res.status === 204 ? null : await res.json() };
-    };
-    const family = (await call('POST', '/families', undefined, { name: 'Home' })).body;
-    const kid = (await call('POST', '/pair', undefined, { code: family.pairingCode, kidName: 'Sara' })).body;
-    return { call, family, kid };
-  };
-
   it('needs a password to be set first', async () => {
     const { call, kid } = await setup();
-    const res = await call('POST', '/kid/unpair', kid.deviceToken, { password: '1234' });
-    expect(res).toMatchObject({ status: 409, body: { code: 'no_password' } });
+    expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: '1234' }))).toMatchObject({ status: 409, body: { code: 'no_password' } });
   });
 
   it('signs out with the right password and revokes the token', async () => {
-    const { call, family, kid } = await setup();
-    await call('PUT', '/parent/password', family.parentToken, { password: '4821' });
-    expect((await call('GET', '/parent/family', family.parentToken)).body.hasPassword).toBe(true);
+    const { call, parentToken, kid } = await setup();
+    await call('PUT', '/parent/password', parentToken, { password: '4821' });
+    expect((await call('GET', '/parent/family', parentToken)).body.hasPassword).toBe(true);
     expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: 'nope' })).body.code).toBe('wrong_password');
     expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: '4821' })).status).toBe(204);
-
-    const after = await call('GET', '/kid/me/config', kid.deviceToken);
-    expect(after).toMatchObject({ status: 401, body: { code: 'device_unpaired' } });
-    expect((await call('GET', '/parent/kids', family.parentToken)).body).toHaveLength(0);
+    expect(await call('GET', '/kid/me/config', kid.deviceToken)).toMatchObject({ status: 401, body: { code: 'device_unpaired' } });
+    expect((await call('GET', '/parent/kids', parentToken)).body).toHaveLength(0);
   });
 
   it('locks after five wrong passwords, even for the right one', async () => {
-    const { call, family, kid } = await setup();
-    await call('PUT', '/parent/password', family.parentToken, { password: '4821' });
+    const { call, parentToken, kid } = await setup();
+    await call('PUT', '/parent/password', parentToken, { password: '4821' });
     for (let i = 0; i < 4; i++) expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: 'x' })).status).toBe(403);
     expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: 'x' })).status).toBe(429);
     expect((await call('POST', '/kid/unpair', kid.deviceToken, { password: '4821' })).status).toBe(429);
   });
 
-  it('signs out when the parent approves a request', async () => {
-    const { call, family, kid } = await setup();
+  it('signs out when the parent approves, stays paired when they decline', async () => {
+    const { call, parentToken, kid } = await setup();
     const req = (await call('POST', '/kid/unpair-requests', kid.deviceToken)).body;
-    // Repeated taps reuse the same pending request.
     expect((await call('POST', '/kid/unpair-requests', kid.deviceToken)).body.id).toBe(req.id);
-
-    const pending = (await call('GET', '/parent/unpair-requests', family.parentToken)).body;
-    expect(pending).toMatchObject([{ id: req.id, kidName: 'Sara' }]);
-    expect((await call('GET', `/kid/unpair-requests/${req.id}`, kid.deviceToken)).body.status).toBe('pending');
-
-    await call('POST', `/parent/unpair-requests/${req.id}`, family.parentToken, { approve: true });
-    expect((await call('GET', `/kid/unpair-requests/${req.id}`, kid.deviceToken)).body.code).toBe('device_unpaired');
-  });
-
-  it('keeps the phone paired when the parent denies', async () => {
-    const { call, family, kid } = await setup();
-    const req = (await call('POST', '/kid/unpair-requests', kid.deviceToken)).body;
-    await call('POST', `/parent/unpair-requests/${req.id}`, family.parentToken, { approve: false });
+    expect((await call('GET', '/parent/unpair-requests', parentToken)).body).toMatchObject([{ id: req.id, kidName: 'Sara' }]);
+    await call('POST', `/parent/unpair-requests/${req.id}`, parentToken, { approve: false });
     expect((await call('GET', `/kid/unpair-requests/${req.id}`, kid.deviceToken)).body.status).toBe('denied');
-    expect((await call('GET', '/kid/me/config', kid.deviceToken)).status).toBe(200);
-  });
 
-  it("won't let another family approve", async () => {
-    const { call, kid } = await setup();
-    const other = (await call('POST', '/families', undefined, { name: 'Other' })).body;
-    const req = (await call('POST', '/kid/unpair-requests', kid.deviceToken)).body;
-    expect((await call('POST', `/parent/unpair-requests/${req.id}`, other.parentToken, { approve: true })).status).toBe(404);
+    const again = (await call('POST', '/kid/unpair-requests', kid.deviceToken)).body;
+    const other = (await setup()).parentToken;
+    expect((await call('POST', `/parent/unpair-requests/${again.id}`, other, { approve: true })).status).toBe(404);
+    await call('POST', `/parent/unpair-requests/${again.id}`, parentToken, { approve: true });
+    expect((await call('GET', `/kid/unpair-requests/${again.id}`, kid.deviceToken)).body.code).toBe('device_unpaired');
+  });
+});
+
+describe('agent tools', () => {
+  it('sets rules, tasks, limits and bedtime by kid name, and refuses unknown apps', async () => {
+    const repo = new Repo(db);
+    const family = await repo.createFamily(randomUUID(), 'Home');
+    const kid = (await repo.pairKid(family.pairing_code, 'Sara'))!;
+    await repo.updateDevice(kid.id, { installedApps: [{ packageName: 'com.instagram.android', label: 'Instagram' }] });
+    const actions: AgentAction[] = [];
+
+    const r: any = await executeTool(repo, family.id, 'set_reading_rule', { kid: 'sara', apps: ['com.instagram.android'], minutes_required: 3 }, actions);
+    expect(r.minutesRequired).toBe(3);
+    const t: any = await executeTool(repo, family.id, 'create_task', {
+      kid: 'Sara', kind: 'article', title: 'Volcanoes', url: 'https://example.org/volcanoes', minutes: 10, required_before_apps: ['com.instagram.android'],
+    }, actions);
+    expect(t.kind).toBe('article');
+    expect((await repo.listRules(kid.id)).filter((x) => x.activity === 'task')).toHaveLength(1);
+    await executeTool(repo, family.id, 'set_app_limit', { kid: 'Sara', app: 'com.instagram.android', minutes_per_day: 20 }, actions);
+    await executeTool(repo, family.id, 'set_bedtime', { kid: 'Sara', start: '21:30', end: '07:00' }, actions);
+    expect(await repo.getQuietHours(kid.id)).toMatchObject({ startMinute: 1290, endMinute: 420 });
+    expect(actions.every((a) => a.ok)).toBe(true);
+
+    await expect(executeTool(repo, family.id, 'set_reading_rule', { kid: 'Sara', apps: ['com.made.up'], minutes_required: 3 }, actions)).rejects.toThrow(/Not installed/);
+    await expect(executeTool(repo, family.id, 'set_bedtime', { kid: 'Sara', start: '25:00', end: '07:00' }, actions)).rejects.toThrow(/HH:MM/);
+    await expect(executeTool(repo, family.id, 'list_apps', { kid: 'Nobody' }, actions)).rejects.toThrow(/No kid named/);
   });
 });

@@ -1,114 +1,49 @@
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { createHash, randomBytes } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
-// SQLite (built into Node 24) keeps local dev at zero setup. The schema is plain SQL so it ports to Postgres as-is.
-export function openDb(path = process.env.DATABASE_PATH ?? './data/mello.db'): DatabaseSync {
-  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
-  const db = new DatabaseSync(path);
-  db.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA foreign_keys = ON;
-
-    CREATE TABLE IF NOT EXISTS families (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      parent_token TEXT NOT NULL UNIQUE,
-      pairing_code TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS kids (
-      id TEXT PRIMARY KEY,
-      family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      device_token TEXT NOT NULL UNIQUE,
-      push_token TEXT,
-      installed_apps TEXT NOT NULL DEFAULT '[]',
-      current_book_id TEXT REFERENCES books(id) ON DELETE SET NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS rules (
-      id TEXT PRIMARY KEY,
-      kid_id TEXT NOT NULL REFERENCES kids(id) ON DELETE CASCADE,
-      apps TEXT NOT NULL,
-      minutes_required INTEGER NOT NULL,
-      unlock_minutes INTEGER NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1
-    );
-
-    CREATE TABLE IF NOT EXISTS books (
-      id TEXT PRIMARY KEY,
-      family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      author TEXT,
-      age_level INTEGER,
-      text TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS challenges (
-      id TEXT PRIMARY KEY,
-      kid_id TEXT NOT NULL REFERENCES kids(id) ON DELETE CASCADE,
-      book_id TEXT,
-      questions TEXT NOT NULL,
-      result TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      kid_id TEXT NOT NULL REFERENCES kids(id) ON DELETE CASCADE,
-      book_id TEXT,
-      seconds INTEGER NOT NULL,
-      from_page INTEGER,
-      to_page INTEGER,
-      app_package TEXT,
-      challenge_id TEXT,
-      passed INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id TEXT PRIMARY KEY,
-      kid_id TEXT NOT NULL REFERENCES kids(id) ON DELETE CASCADE,
-      kind TEXT NOT NULL CHECK (kind IN ('audio', 'tts')),
-      text TEXT,
-      audio_file TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      played_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS unpair_requests (
-      id TEXT PRIMARY KEY,
-      kid_id TEXT NOT NULL REFERENCES kids(id) ON DELETE CASCADE,
-      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied')),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      decided_at TEXT
-    );
-  `);
-  migrate(db);
-  return db;
+/** The one thing the repo needs from a database: parameterised SQL ($1, $2, …) returning rows. */
+export interface Db {
+  query<T = Record<string, any>>(sql: string, params?: unknown[]): Promise<T[]>;
+  close(): Promise<void>;
 }
 
-/** Columns added after v0.1. SQLite has no ADD COLUMN IF NOT EXISTS, so check first. */
-function migrate(db: DatabaseSync) {
-  const addColumn = (table: string, column: string, type: string) => {
-    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-    if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+const SQL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'sql');
+
+/**
+ * DATABASE_URL set → Supabase Postgres (production and shared dev).
+ * Otherwise → PGlite, an in-process Postgres, on disk under ./data (or in memory for tests),
+ * running the same schema file, so local dev needs no setup.
+ */
+export async function openDb(opts: { url?: string; pglitePath?: string } = {}): Promise<Db> {
+  const url = opts.url ?? process.env.DATABASE_URL;
+  if (url) return openPostgres(url);
+  return openPglite(opts.pglitePath ?? process.env.PGLITE_PATH ?? './data/pglite');
+}
+
+async function openPostgres(url: string): Promise<Db> {
+  const { default: postgres } = await import('postgres');
+  // Supabase's transaction pooler (port 6543) doesn't support prepared statements.
+  const sql = postgres(url, { prepare: false, max: 5, idle_timeout: 30 });
+  return {
+    query: async (text, params = []) => (await sql.unsafe(text, params as any[])) as any,
+    close: () => sql.end(),
   };
-  // scrypt hash of the password a kid's phone needs to sign out ("salt:hash", hex).
-  addColumn('families', 'parent_password', 'TEXT');
-  // A signed-out phone keeps its history but its token stops working.
-  addColumn('kids', 'revoked_at', 'TEXT');
-  // Brute-force guard for the sign-out password.
-  addColumn('kids', 'unpair_failures', 'INTEGER NOT NULL DEFAULT 0');
-  addColumn('kids', 'unpair_locked_until', 'INTEGER');
 }
 
-export const newId = () => randomUUID();
+async function openPglite(path: string): Promise<Db> {
+  const { PGlite } = await import('@electric-sql/pglite');
+  if (path !== 'memory://') mkdirSync(path, { recursive: true });
+  const db = new PGlite(path);
+  await db.exec(readFileSync(join(SQL_DIR, '001_core.sql'), 'utf8'));
+  return {
+    query: async (text, params = []) => (await db.query(text, params)).rows as any,
+    close: () => db.close(),
+  };
+}
+
 export const newToken = () => randomBytes(24).toString('base64url');
+export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 /** 6-digit code the parent reads out to pair a kid's phone. */
 export const newPairingCode = () => String(100000 + (randomBytes(4).readUInt32BE() % 900000));

@@ -2,24 +2,29 @@ import { useState } from 'react';
 import { Redirect } from 'expo-router';
 import { publicApi } from '@/lib/api';
 import { useSession } from '@/lib/session';
+import { supabase } from '@/lib/supabase';
 import { Button, Card, ErrorText, Field, Muted, Screen, Title } from '@/components/ui';
 
 export default function Welcome() {
-  const { session, signIn } = useSession();
+  const { session, signInKid } = useSession();
   const [mode, setMode] = useState<'choose' | 'parent' | 'kid'>('choose');
-  const [familyName, setFamilyName] = useState('');
+  const [isNewAccount, setIsNewAccount] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [kidName, setKidName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   if (session) return <Redirect href="/" />;
 
+  // The root layout moves to the right home screen once the session changes.
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      // The root layout moves to the right home screen once the session changes.
       await fn();
     } catch (e) {
       setError(e);
@@ -28,23 +33,43 @@ export default function Welcome() {
     }
   };
 
+  const parentAuth = () =>
+    run(async () => {
+      const creds = { email: email.trim(), password };
+      if (isNewAccount) {
+        const { data, error: err } = await supabase.auth.signUp(creds);
+        if (err) throw err;
+        // With email confirmation on, there's no session until the link in the email is opened.
+        if (!data.session) setNotice(`We sent a confirmation link to ${creds.email}. Open it, then sign in here.`);
+      } else {
+        const { error: err } = await supabase.auth.signInWithPassword(creds);
+        if (err) throw err;
+      }
+    });
+
   if (mode === 'parent')
     return (
       <Screen>
-        <Title>Set up your family</Title>
-        <Muted>This phone becomes the parent phone. You will get a 6-digit code to pair each kid's phone.</Muted>
-        <Field label="Family name" value={familyName} onChangeText={setFamilyName} placeholder="The Smiths" />
+        <Title>{isNewAccount ? 'Create a parent account' : 'Parent sign in'}</Title>
+        <Muted>Your account works on any phone, and you can add a second parent later.</Muted>
+        <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
+        <Field label="Password (8+ characters)" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoComplete="password" />
         <ErrorText error={error} />
+        {notice && <Muted>{notice}</Muted>}
         <Button
-          title="Create family"
+          title={isNewAccount ? 'Create account' : 'Sign in'}
           busy={busy}
-          disabled={!familyName.trim()}
-          onPress={() =>
-            run(async () => {
-              const f = await publicApi.createFamily(familyName.trim());
-              await signIn({ role: 'parent', token: f.parentToken, familyName: familyName.trim() });
-            })
-          }
+          disabled={!/^\S+@\S+\.\S+$/.test(email.trim()) || password.length < 8}
+          onPress={parentAuth}
+        />
+        <Button
+          title={isNewAccount ? 'I already have an account' : 'Create a new account'}
+          variant="secondary"
+          onPress={() => {
+            setIsNewAccount(!isNewAccount);
+            setError(null);
+            setNotice(null);
+          }}
         />
         <Button title="Back" variant="secondary" onPress={() => setMode('choose')} />
       </Screen>
@@ -65,7 +90,7 @@ export default function Welcome() {
           onPress={() =>
             run(async () => {
               const k = await publicApi.pair(code, kidName.trim());
-              await signIn({ role: 'kid', token: k.deviceToken, kidId: k.kidId, kidName: kidName.trim() });
+              await signInKid({ role: 'kid', token: k.deviceToken, kidId: k.kidId, kidName: kidName.trim() });
             })
           }
         />
@@ -77,11 +102,11 @@ export default function Welcome() {
     <Screen>
       <Title>Who uses this phone?</Title>
       <Card>
-        <Muted>Parents set reading rules, pick books and send voice messages.</Muted>
+        <Muted>Parents set reading rules, tasks, time limits and bedtime, and send voice messages.</Muted>
         <Button title="I'm the parent" onPress={() => setMode('parent')} />
       </Card>
       <Card>
-        <Muted>Kids read a little before opening the apps their parent picked.</Muted>
+        <Muted>Kids read, listen or watch a little before opening the apps their parent picked.</Muted>
         <Button title="This is my kid's phone" variant="secondary" onPress={() => setMode('kid')} />
       </Card>
     </Screen>

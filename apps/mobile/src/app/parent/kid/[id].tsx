@@ -18,8 +18,8 @@ const UNLOCK_OPTIONS = [15, 30, 60];
 
 export default function KidDetail() {
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
-  const session = useParentSession();
-  const api = useMemo(() => parentApi(session.token), [session.token]);
+  useParentSession();
+  const api = useMemo(() => parentApi(), []);
 
   const [kid, setKid] = useState<Kid | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);

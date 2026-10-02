@@ -10,8 +10,8 @@ type Item = AgentTurn & { actions?: AgentAction[] };
 const EXAMPLES = ['Make Sara read 5 minutes before TikTok', 'Tell Adam dinner is ready', 'How much did Sara read this week?'];
 
 export default function Agent() {
-  const session = useParentSession();
-  const api = useMemo(() => parentApi(session.token), [session.token]);
+  useParentSession();
+  const api = useMemo(() => parentApi(), []);
   const [items, setItems] = useState<Item[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
