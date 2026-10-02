@@ -5,6 +5,7 @@ import type {
   BookInput,
   BookWithText,
   ChallengeResult,
+  CharacterPrefs,
   ClientAction,
   SelfProfile,
   SelfProfileInput,
@@ -147,6 +148,7 @@ export const kidApi = (token: string) => ({
     request<ChallengeResult>('POST', `/kid/challenges/${challengeId}/answers`, token, { answers }),
   logSession: (s: { bookId?: string; taskId?: string; seconds: number; fromPage?: number; toPage?: number; appPackage?: string; challengeId?: string; passed?: boolean }) =>
     request<{ ok: true }>('POST', '/kid/sessions', token, s),
+  setCharacter: (prefs: CharacterPrefs) => request<Kid>('PUT', '/kid/me/character', token, prefs),
   unplayedMessages: () => request<Message[]>('GET', '/kid/me/messages?unplayed=1', token),
   markPlayed: (id: string) => request<{ ok: boolean }>('POST', `/kid/me/messages/${id}/played`, token),
   unpairWithPassword: (password: string) => request<void>('POST', '/kid/unpair', token, { password }),

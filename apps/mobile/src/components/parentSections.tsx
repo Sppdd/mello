@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Switch, Text, View } from 'react-native';
-import type { AppLimit, Kid, QuietHours, Task, TaskKind } from '@mello/shared';
+import { CHARACTER_LIST, characterOf, type AppLimit, type CharacterId, type Kid, type QuietHours, type Task, type TaskKind } from '@mello/shared';
 import type { parentApi } from '@/lib/api';
 import { Button, Card, Chip, colors, ErrorText, Field, Label, Muted } from './ui';
 
@@ -216,6 +216,20 @@ export function SettingsSection({ kid, api, onChange }: { kid: Kid; api: Api; on
           <Muted>{kid.name}'s phone asks for permission and shows that location is shared while Mello is open.</Muted>
         </View>
         <Switch value={kid.settings.location} onValueChange={(v) => toggle('location', v)} />
+      </View>
+      <View style={{ gap: 6 }}>
+        <Text style={{ color: colors.ink, fontSize: 16 }}>Reading buddies</Text>
+        <Muted>
+          {kid.name} has picked {characterOf(kid.settings.character).name}. Choose which buddies they can switch to (none selected = any).
+        </Muted>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {CHARACTER_LIST.filter((c) => c.kidFriendly).map((c) => {
+            const allowed = kid.settings.allowedCharacters;
+            const on = allowed.includes(c.id);
+            const next: CharacterId[] = on ? allowed.filter((x) => x !== c.id) : [...allowed, c.id];
+            return <Chip key={c.id} label={c.name} selected={on} onPress={() => run(() => api.updateSettings(kid.id, { allowedCharacters: next })).then(onChange)} />;
+          })}
+        </View>
       </View>
       <ErrorText error={error} />
     </Card>

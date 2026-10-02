@@ -9,6 +9,8 @@ import { join } from 'node:path';
 import {
   AppLimit,
   BookInput,
+  CharacterPrefs,
+  CHARACTERS,
   DeviceStatus,
   InstalledApp,
   KidSettings,
@@ -385,6 +387,17 @@ export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken }
       quietHours,
     };
     return c.json(config);
+  });
+
+  /** A kid picks their buddy, among kid-friendly characters the parent allows. */
+  kid.put('/me/character', async (c) => {
+    const prefs = await body(c, CharacterPrefs);
+    const k = (await repo.getKid(c.get('familyId'), c.get('kidId')))!;
+    const allowed = k.settings.allowedCharacters;
+    if (k.kind === 'kid' && (!CHARACTERS[prefs.characterId].kidFriendly || (allowed.length > 0 && !allowed.includes(prefs.characterId)))) {
+      throw new CodedError(403, 'Ask your parent to allow this buddy', 'character_not_allowed');
+    }
+    return c.json(await repo.updateSettings(c.get('familyId'), k.id, { character: prefs }));
   });
 
   kid.post('/tasks/:taskId/progress', async (c) => {

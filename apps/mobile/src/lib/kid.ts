@@ -135,7 +135,7 @@ export async function playPendingMessages(token: string, onPlay?: (m: Message) =
     for (const m of messages) {
       onPlay?.(m);
       if (m.kind === 'audio' && m.audioUrl) await playUrl(m.audioUrl);
-      else if (m.text) await speak(m.text);
+      else if (m.text) await speak(m.text, characterOf(cachedConfig()?.kid.settings.character).voice);
       await api.markPlayed(m.id);
     }
   } catch (err) {
@@ -145,9 +145,10 @@ export async function playPendingMessages(token: string, onPlay?: (m: Message) =
   }
 }
 
-function speak(text: string) {
+/** Typed messages are read in the buddy's voice; parent recordings play as recorded. */
+function speak(text: string, voice: { pitch: number; rate: number }) {
   return new Promise<void>((resolve) => {
-    Speech.speak(text, { rate: 0.95, onDone: resolve, onStopped: resolve, onError: () => resolve() });
+    Speech.speak(text, { pitch: voice.pitch, rate: voice.rate, onDone: resolve, onStopped: resolve, onError: () => resolve() });
   });
 }
 

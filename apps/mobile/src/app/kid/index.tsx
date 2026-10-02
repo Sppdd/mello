@@ -7,7 +7,9 @@ import { MelloBlocker, type PendingBlock } from '../../../modules/mello-blocker'
 import { useKidSession, useSession } from '@/lib/session';
 import { isUnpaired, kidApi } from '@/lib/api';
 import { cachedConfig, clearKidDevice, playPendingMessages, suggestions, syncKid } from '@/lib/kid';
-import { Button, Card, colors, Label, Muted, Screen, Title } from '@/components/ui';
+import { characterLine } from '@mello/shared';
+import { CharacterSays } from '@/components/Character';
+import { Button, Card, colors, Label, Muted, Screen } from '@/components/ui';
 
 export default function KidHome() {
   const session = useKidSession();
@@ -96,7 +98,11 @@ export default function KidHome() {
 
   return (
     <Screen>
-      <Title>Hi {session.kidName}!</Title>
+      <CharacterSays
+        prefs={config?.kid.settings.character}
+        mood={gateOn || !MelloBlocker.isSupported() ? 'happy' : 'worried'}
+        text={characterLine(config?.kid.settings.character, 'greet', { name: session.kidName }, new Date().getDate())}
+      />
 
       {nowPlaying && (
         <Card>
@@ -157,6 +163,7 @@ export default function KidHome() {
         </Muted>
       )}
 
+      <Button title="Change my buddy" variant="secondary" onPress={() => router.push('/kid/buddy')} />
       <Button title="Sign out of Mello" variant="secondary" onPress={() => router.push('/kid/signout')} />
     </Screen>
   );

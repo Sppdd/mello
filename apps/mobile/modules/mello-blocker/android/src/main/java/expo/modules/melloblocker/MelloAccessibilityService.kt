@@ -47,10 +47,11 @@ class MelloAccessibilityService : AccessibilityService() {
   override fun onAccessibilityEvent(event: AccessibilityEvent?) {
     val pkg = event?.packageName?.toString() ?: return
     val now = System.currentTimeMillis()
+    // Scrolls, taps and content changes in the focus app mean the user is really there (turning pages).
     if (pkg == focusTarget) focusActiveAt = now
-    if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-      // Fires constantly while scrolling; the periodic tick already re-checks the current app.
-      if (now - lastCheckAt < CONTENT_CHECK_INTERVAL_MS) return
+    if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+      // Content, scroll and click events fire constantly; the periodic tick already re-checks the current app.
+      if (now - lastCheckAt < CONTENT_CHECK_INTERVAL_MS || isSystemChrome(pkg)) return
     } else if (isSystemChrome(pkg)) {
       return // keyboards and system UI don't change which app the kid is using
     }

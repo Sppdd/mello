@@ -1,4 +1,4 @@
 <resources>
   <string name="mello_accessibility_label">Mello reading gate</string>
-  <string name="mello_accessibility_description">Mello checks which app is opening so it can ask for a few minutes of reading before apps your parent chose. It also shows a small bubble with how much time is left. It does not read what is on the screen.</string>
+  <string name="mello_accessibility_description">Mello checks which app is open so it can ask for a few minutes of reading before the apps you or your parent chose, keep you in your reading or listening app during a focus session, and show a small bubble with the time left. It only sees app names, never what is on the screen.</string>
 </resources>

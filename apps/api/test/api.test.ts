@@ -367,6 +367,17 @@ describe('characters', () => {
   });
 });
 
+describe('kid buddies', () => {
+  it('lets a kid pick a kid-friendly buddy the parent allows', async () => {
+    const { call, parentToken, kid } = await setup();
+    expect((await call('PUT', '/kid/me/character', kid.deviceToken, { characterId: 'pip' })).body.settings.character).toMatchObject({ characterId: 'pip', tone: 'balanced' });
+    expect((await call('PUT', '/kid/me/character', kid.deviceToken, { characterId: 'bruno' })).body.code).toBe('character_not_allowed');
+    await call('PATCH', `/parent/kids/${kid.kidId}/settings`, parentToken, { allowedCharacters: ['mello', 'luna'] });
+    expect((await call('PUT', '/kid/me/character', kid.deviceToken, { characterId: 'pip' })).status).toBe(403);
+    expect((await call('PUT', '/kid/me/character', kid.deviceToken, { characterId: 'luna' })).status).toBe(200);
+  });
+});
+
 describe('app tasks and categories', () => {
   it('needs an app for app tasks, and never a protected one', () => {
     expect(TaskInput.safeParse({ kind: 'app', title: 'Read', requiredMinutes: 20 }).success).toBe(false);

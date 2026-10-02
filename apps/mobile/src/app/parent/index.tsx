@@ -8,7 +8,7 @@ import { Button, Card, colors, ErrorText, Field, Label, Muted, Screen, Title } f
 
 export default function ParentHome() {
   const session = useParentSession();
-  const { signOut } = useSession();
+  const { signOut, setIntent } = useSession();
   const [family, setFamily] = useState<Family | null>(null);
   const [noFamily, setNoFamily] = useState(false);
   const [kids, setKids] = useState<Kid[]>([]);
@@ -99,6 +99,11 @@ export default function ParentHome() {
 
       <Button title="Ask Mello (agent)" onPress={() => router.push('/parent/agent')} />
       <Button title="Books" variant="secondary" onPress={() => router.push('/parent/books')} />
+      <Button
+        title="Use Mello for myself on this phone"
+        variant="secondary"
+        onPress={() => setIntent('self').then(() => router.replace('/'))}
+      />
       <Button
         title="Sign out of this phone"
         variant="danger"

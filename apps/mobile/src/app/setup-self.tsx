@@ -51,6 +51,7 @@ export default function SetupSelf() {
           your account so your companion can talk about them. You can delete that history any time.
         </Muted>
       </Card>
+      <Muted>If you're also a parent here, this phone switches to your personal mode. Family controls stay on your other phones, and come back here when you sign out of personal mode.</Muted>
       <ErrorText error={error} />
       <Button title="Let's start" busy={busy} disabled={!name.trim()} onPress={finish} />
       <Button title="Not now" variant="secondary" onPress={() => setIntent(null)} />
