@@ -10,7 +10,7 @@ export interface Db {
 }
 
 const SQL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'sql');
-/** Schema files that run on any Postgres; 002_supabase.sql only runs on Supabase. */
+/** Schema files that run on any Postgres; 002_supabase.sql and 004_supabase_self.sql are Supabase-only. */
 const PORTABLE_SQL = ['001_core.sql', '003_self.sql'];
 
 /**

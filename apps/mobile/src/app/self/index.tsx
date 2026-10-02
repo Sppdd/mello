@@ -29,6 +29,13 @@ export default function SelfHome() {
     (block: PendingBlock) => {
       const c = cachedConfig();
       const task = block.reason === 'rule' ? appTaskFor(c, block.packageName) : null;
+      // Goal already done today (e.g. the unlock ran out): open the app again without another session.
+      if (task && c?.taskProgress.find((p) => p.taskId === task.id)?.completed) {
+        const rule = c.rules.find((r) => r.taskId === task.id && r.apps.includes(block.packageName));
+        MelloBlocker.unlock(block.packageName, rule?.unlockMinutes ?? 30);
+        MelloBlocker.launchApp(block.packageName);
+        return;
+      }
       if (task?.appPackage) {
         setStopped(null);
         router.push({ pathname: '/self/focus', params: { app: task.appPackage, minutes: String(minutesLeftOn(c, task)), taskId: task.id, gated: block.packageName } });
