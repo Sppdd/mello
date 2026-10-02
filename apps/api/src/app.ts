@@ -14,7 +14,9 @@ import {
   KidSettings,
   QuietHours,
   RuleInput,
+  SelfProfileInput,
   TaskInput,
+  UsageDay,
   type KidConfig,
   type PublicChallenge,
 } from '@mello/shared';
@@ -22,6 +24,7 @@ import type { Db } from './db.ts';
 import { NotFound, Repo } from './repo.ts';
 import { generateChallenge, grade } from './challenge.ts';
 import { runAgent } from './agent.ts';
+import { reflectionQuestions, reflectionReply, runCoach, streakOf } from './coach.ts';
 import { sendPush } from './push.ts';
 import { LlmUnavailableError } from './llm.ts';
 import type { VerifyParentToken } from './auth.ts';
@@ -254,6 +257,79 @@ export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken }
     return c.json(await runAgent(repo, fam(c), messages));
   });
 
+  // ---------- Self mode: a signed-in user coaching their own phone ----------
+  const self = new Hono<ParentEnv>().use(parentAuth);
+  const ChatHistory = z.object({ messages: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(4000) })).min(1) });
+  const me = async (c: Context<ParentEnv>) => {
+    const profile = await repo.selfProfile(c.get('userId'));
+    if (!profile || profile.revoked) throw new CodedError(404, 'Set up Mello for yourself first', 'no_self');
+    return profile;
+  };
+  const publicProfile = ({ familyId: _f, revoked: _r, ...p }: NonNullable<Awaited<ReturnType<typeof repo.selfProfile>>>) => p;
+
+  /** Creates the user's self subject, or moves it to this phone (the previous phone's token stops working). */
+  self.post('/setup', async (c) => {
+    const { name } = await body(c, z.object({ name: z.string().trim().min(1).max(40) }));
+    const { subjectId, deviceToken } = await repo.setupSelf(c.get('userId'), name);
+    return c.json({ subjectId, deviceToken, profile: publicProfile((await repo.selfProfile(c.get('userId')))!) }, 201);
+  });
+  self.get('/profile', async (c) => c.json(publicProfile(await me(c))));
+  self.put('/profile', async (c) => {
+    await me(c);
+    return c.json(publicProfile((await repo.updateSelfProfile(c.get('userId'), await body(c, SelfProfileInput)))!));
+  });
+
+  self.put('/usage', async (c) => {
+    const p = await me(c);
+    await repo.putUsageDay(p.subjectId, await body(c, UsageDay));
+    return c.body(null, 204);
+  });
+  self.get('/usage', async (c) => {
+    const p = await me(c);
+    const usage = await repo.usageDays(p.subjectId, Number(c.req.query('days') ?? 7) || 7);
+    const today = Day.catch(new Date().toISOString().slice(0, 10)).parse(c.req.query('today'));
+    return c.json({ days: usage, streak: streakOf(usage, today) });
+  });
+
+  self.post('/reflect', async (c) => {
+    const p = await me(c);
+    const s = await body(c, z.object({ appLabel: z.string().max(80), title: z.string().trim().max(120).nullable().default(null), minutes: z.number().int().min(1).max(600) }));
+    return c.json({ questions: await reflectionQuestions(p, s) });
+  });
+  self.post('/reflections', async (c) => {
+    const p = await me(c);
+    const r = await body(
+      c,
+      z.object({
+        title: z.string().trim().max(120).nullable().default(null),
+        questions: z.array(z.string().max(300)).max(3),
+        answers: z.array(z.string().max(2000)).max(3),
+      }),
+    );
+    const answered = r.answers.some((a) => a.trim());
+    const reply = answered ? await reflectionReply(p, r.questions, r.answers) : null;
+    await repo.addReflection(p.subjectId, { ...r, reply });
+    return c.json({ reply }, 201);
+  });
+
+  self.post('/coach/chat', async (c) => {
+    const profile = await me(c);
+    const { messages } = await body(c, ChatHistory);
+    const subject = (await repo.getKid(profile.familyId, profile.subjectId))!;
+    return c.json(await runCoach(repo, { userId: c.get('userId'), familyId: profile.familyId, subject, profile: publicProfile(profile) }, messages));
+  });
+
+  /** Wipes usage history, reflections, sessions and alerts. Goals and limits stay. */
+  self.delete('/data', async (c) => {
+    await repo.deleteSelfData((await me(c)).subjectId);
+    return c.body(null, 204);
+  });
+  /** Signs this phone out of self mode. Your own phone, so no password; the next setup issues a new token. */
+  self.post('/signout', async (c) => {
+    await repo.revokeKid((await me(c)).subjectId);
+    return c.body(null, 204);
+  });
+
   // ---------- Kid device ----------
   const kid = new Hono<KidEnv>().use(kidAuth);
 
@@ -333,7 +409,7 @@ export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken }
   kid.post('/alerts', async (c) => {
     const { kind, detail } = await body(
       c,
-      z.object({ kind: z.enum(['bedtime_attempt', 'limit_reached', 'protection_off', 'gate_bypass_attempt']), detail: z.record(z.string(), z.unknown()).default({}) }),
+      z.object({ kind: z.enum(['bedtime_attempt', 'limit_reached', 'protection_off', 'gate_bypass_attempt', 'break_glass']), detail: z.record(z.string(), z.unknown()).default({}) }),
     );
     await repo.addAlert(c.get('kidId'), kind, detail);
     return c.json({ ok: true }, 201);
@@ -401,5 +477,6 @@ export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken }
   // Separate prefixes so each sub-app's auth middleware only covers its own routes.
   app.route('/parent', parent);
   app.route('/kid', kid);
+  app.route('/self', self);
   return app;
 }

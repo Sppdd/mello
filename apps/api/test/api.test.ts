@@ -1,10 +1,28 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { evaluateGate, GeneratedChallenge, inQuietHours, isPassing, minutesLeft, paginate, TaskInput, youtubeId, type Rule } from '@mello/shared';
+import {
+  CHARACTER_LIST,
+  categoryFor,
+  characterLine,
+  computeStreak,
+  evaluateGate,
+  focusDecision,
+  GeneratedChallenge,
+  inQuietHours,
+  isPassing,
+  minutesLeft,
+  paginate,
+  personaPrompt,
+  TaskInput,
+  youtubeId,
+  type Rule,
+  type UsageDay,
+} from '@mello/shared';
 import { openDb, type Db } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
 import { Repo } from '../src/repo.ts';
 import { executeTool, type AgentAction } from '../src/agent.ts';
+import { executeCoachTool } from '../src/coach.ts';
 import { extractJson, grade } from '../src/challenge.ts';
 
 // ---------- pure logic ----------
@@ -155,7 +173,8 @@ describe('HTTP API', () => {
     const config = await call('GET', '/kid/me/config?day=2026-09-30', kid.deviceToken);
     expect(config.body.rules).toHaveLength(1);
     expect(config.body.kid.installedApps[0].label).toBe('TikTok');
-    expect(config.body.kid.settings).toEqual({ location: false, photoProof: false, attentionChecks: true });
+    expect(config.body.kid.settings).toMatchObject({ location: false, photoProof: false, attentionChecks: true, character: { characterId: 'mello' } });
+    expect(config.body.kid.kind).toBe('kid');
   });
 
   it('keeps parent and kid tokens apart, and families apart', async () => {
@@ -330,5 +349,173 @@ describe('agent tools', () => {
     await expect(executeTool(repo, family.id, 'set_reading_rule', { kid: 'Sara', apps: ['com.made.up'], minutes_required: 3 }, actions)).rejects.toThrow(/Not installed/);
     await expect(executeTool(repo, family.id, 'set_bedtime', { kid: 'Sara', start: '25:00', end: '07:00' }, actions)).rejects.toThrow(/HH:MM/);
     await expect(executeTool(repo, family.id, 'list_apps', { kid: 'Nobody' }, actions)).rejects.toThrow(/No kid named/);
+  });
+});
+
+// ---------- self mode ----------
+
+describe('characters', () => {
+  it('fills lines and keeps every persona in character', () => {
+    expect(characterLine({ characterId: 'pip' }, 'bounce', { app: 'ReadEra' }, 1)).toBe('Sneaky! Back to ReadEra.');
+    for (const c of CHARACTER_LIST) {
+      const prompt = personaPrompt({ characterId: c.id, tone: 'firm' }, 'Ali');
+      expect(prompt).toContain(c.name);
+      expect(prompt).toMatch(/never insult or shame/);
+      expect(prompt).toMatch(/Never mention being an AI/);
+    }
+    expect(personaPrompt({ characterId: 'sage', nickname: 'Hoot' }, 'Ali')).toMatch(/^You are Hoot, a owl/);
+  });
+});
+
+describe('app tasks and categories', () => {
+  it('needs an app for app tasks, and never a protected one', () => {
+    expect(TaskInput.safeParse({ kind: 'app', title: 'Read', requiredMinutes: 20 }).success).toBe(false);
+    expect(TaskInput.safeParse({ kind: 'app', title: 'Read', appPackage: 'com.android.settings', requiredMinutes: 20 }).success).toBe(false);
+    expect(TaskInput.parse({ kind: 'app', title: 'Read', appPackage: 'org.readera', requiredMinutes: 20 })).toMatchObject({ url: null, appPackage: 'org.readera' });
+  });
+  it('categorises known apps first, then by the Android category', () => {
+    expect(categoryFor('org.readera')).toBe('reading');
+    expect(categoryFor('com.instagram.android', 7)).toBe('social');
+    expect(categoryFor('com.some.game', 0)).toBe('game');
+    expect(categoryFor('com.some.tool')).toBe('other');
+  });
+});
+
+describe('focusDecision', () => {
+  const focus = { target: 'org.readera', requiredMs: 60_000, elapsedMs: 0, lastActiveAt: 1_000_000, gatedApp: null };
+  it('counts active time in the target and pauses when idle', () => {
+    expect(focusDecision(focus, 'org.readera', 1_000_000 + 30_000)).toBe('count');
+    expect(focusDecision(focus, 'org.readera', 1_000_000 + 91_000)).toBe('idle');
+  });
+  it('sends other apps back, but keeps Mello and emergency apps reachable', () => {
+    expect(focusDecision(focus, 'com.instagram.android', 1_000_000)).toBe('return');
+    expect(focusDecision(focus, 'com.google.android.apps.nexuslauncher', 1_000_000)).toBe('return');
+    expect(focusDecision(focus, 'com.mello.app', 1_000_000)).toBe('allow');
+    expect(focusDecision(focus, 'com.google.android.dialer', 1_000_000)).toBe('allow');
+  });
+  it('is done once enough time is in', () => {
+    expect(focusDecision({ ...focus, elapsedMs: 60_000 }, 'com.instagram.android', 1_000_000)).toBe('done');
+  });
+});
+
+describe('computeStreak', () => {
+  const good = (day: string) => ({ day, guardOn: 1, goalMet: true });
+  it('counts back from yesterday while today is in progress', () => {
+    expect(computeStreak([good('2026-09-28'), good('2026-09-29'), good('2026-09-30')], '2026-10-01')).toMatchObject({ current: 3, todayDone: false });
+    expect(computeStreak([good('2026-09-30'), good('2026-10-01')], '2026-10-01')).toMatchObject({ current: 2, todayDone: true });
+  });
+  it('needs the guard on and a goal met', () => {
+    expect(computeStreak([{ day: '2026-09-30', guardOn: 0.5, goalMet: true }], '2026-10-01').current).toBe(0);
+    expect(computeStreak([{ day: '2026-09-30', guardOn: 1, goalMet: false }], '2026-10-01').current).toBe(0);
+  });
+  it('bridges one missed day per week with a freeze, not two', () => {
+    // Week of Mon 2026-09-21: miss Wed 23rd → frozen.
+    const s = computeStreak([good('2026-09-21'), good('2026-09-22'), good('2026-09-24'), good('2026-09-25')], '2026-09-26');
+    expect(s).toMatchObject({ current: 4, frozen: ['2026-09-23'] });
+    // A second miss in the same week ends the run: 25, (24 frozen), 23, then 22 breaks it.
+    const t = computeStreak([good('2026-09-21'), good('2026-09-23'), good('2026-09-25')], '2026-09-26');
+    expect(t).toMatchObject({ current: 2, frozen: ['2026-09-24'], best: 2 });
+  });
+});
+
+describe('self mode API', () => {
+  const usage = (day: string, over: Partial<UsageDay> = {}): UsageDay => ({
+    day,
+    apps: [{ packageName: 'com.instagram.android', label: 'Instagram', category: 'social', minutes: 95, opens: 41 }],
+    categories: { social: 95, reading: 10 },
+    unlocks: 80,
+    guardOn: 1,
+    focusMinutes: 10,
+    breakGlass: 0,
+    goalMet: true,
+    ...over,
+  });
+
+  it('sets up, reissues the token on a new phone, and stays out of parent views', async () => {
+    const { call, parentToken, kid } = await setup();
+    expect((await call('GET', '/self/profile', parentToken)).body.code).toBe('no_self');
+    const first = await call('POST', '/self/setup', parentToken, { name: 'Ali' });
+    expect(first.status).toBe(201);
+    expect(first.body.profile).toMatchObject({ name: 'Ali', interests: [], alwaysSuggest: true, character: { characterId: 'mello' } });
+
+    // The same /kid plumbing works with the self token.
+    expect((await call('GET', '/kid/me/config', first.body.deviceToken)).body.kid).toMatchObject({ kind: 'self', name: 'Ali' });
+    // Parents (and the parent agent) only see real kids, even if this user is also a parent.
+    expect((await call('GET', '/parent/kids', parentToken)).body.map((k: any) => k.id)).toEqual([kid.kidId]);
+
+    const second = await call('POST', '/self/setup', parentToken, { name: 'Ali' });
+    expect(second.body.subjectId).toBe(first.body.subjectId);
+    expect((await call('GET', '/kid/me/config', first.body.deviceToken)).status).toBe(401);
+    expect((await call('GET', '/kid/me/config', second.body.deviceToken)).status).toBe(200);
+
+    const updated = await call('PUT', '/self/profile', parentToken, { interests: ['stoicism'], character: { characterId: 'pip', tone: 'firm' } });
+    expect(updated.body).toMatchObject({ interests: ['stoicism'], character: { characterId: 'pip', tone: 'firm', voiceOn: true } });
+
+    expect((await call('POST', '/self/signout', parentToken)).status).toBe(204);
+    expect((await call('GET', '/kid/me/config', second.body.deviceToken)).status).toBe(401);
+    expect((await call('GET', '/self/profile', parentToken)).body.code).toBe('no_self');
+  });
+
+  it('stores daily aggregates for 30 days, computes the streak, and deletes on request', async () => {
+    const { call, parentToken } = await setup();
+    const s = (await call('POST', '/self/setup', parentToken, { name: 'Ali' })).body;
+    const iso = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
+    expect((await call('PUT', '/self/usage', parentToken, usage(iso(1)))).status).toBe(204);
+    await call('PUT', '/self/usage', parentToken, usage(iso(2)));
+    await call('PUT', '/self/usage', parentToken, usage(iso(2), { unlocks: 12 })); // upsert
+    await call('PUT', '/self/usage', parentToken, usage(iso(40)));
+    expect((await call('PUT', '/self/usage', parentToken, { ...usage(iso(0)), guardOn: 2 })).status).toBe(400);
+
+    const got = (await call('GET', `/self/usage?days=30&today=${iso(0)}`, parentToken)).body;
+    expect(got.days.map((d: UsageDay) => d.day)).toEqual([iso(1), iso(2)]); // the 40-day-old one was pruned
+    expect(got.days[1].unlocks).toBe(12);
+    expect(got.streak).toMatchObject({ current: 2, todayDone: false });
+
+    await call('POST', '/kid/sessions', s.deviceToken, { seconds: 600, appPackage: 'org.readera' });
+    expect((await call('DELETE', '/self/data', parentToken)).status).toBe(204);
+    expect((await call('GET', '/self/usage', parentToken)).body.days).toEqual([]);
+  });
+
+  it('falls back to simple reflection questions without the LLM', async () => {
+    const saved = process.env.NEBIUS_API_KEY;
+    delete process.env.NEBIUS_API_KEY;
+    const { call, parentToken } = await setup();
+    await call('POST', '/self/setup', parentToken, { name: 'Ali' });
+    const r = await call('POST', '/self/reflect', parentToken, { appLabel: 'ReadEra', title: 'Meditations', minutes: 20 });
+    expect(r.body.questions[0]).toMatch(/Meditations/);
+    const saved2 = await call('POST', '/self/reflections', parentToken, { title: 'Meditations', questions: r.body.questions, answers: ['Control what you can.'] });
+    expect(saved2).toMatchObject({ status: 201, body: { reply: null } });
+    process.env.NEBIUS_API_KEY = saved;
+  });
+
+  it('coach tools set focus goals, limits and interests, and only offer to start focus', async () => {
+    const repo = new Repo(db);
+    const userId = randomUUID();
+    const { subjectId } = await repo.setupSelf(userId, 'Ali');
+    await repo.updateDevice(subjectId, {
+      installedApps: [
+        { packageName: 'org.readera', label: 'ReadEra' },
+        { packageName: 'com.instagram.android', label: 'Instagram' },
+      ],
+    });
+    const profile = (await repo.selfProfile(userId))!;
+    const ctx = { userId, familyId: profile.familyId, subject: (await repo.getKid(profile.familyId, subjectId))!, profile };
+    const actions: AgentAction[] = [];
+    const client: any[] = [];
+
+    await executeCoachTool(repo, ctx, 'set_focus_goal', { app: 'org.readera', title: 'Read', minutes: 20, required_before_apps: ['com.instagram.android'] }, actions, client);
+    const goals: any = await executeCoachTool(repo, ctx, 'list_goals', {}, actions, client);
+    expect(goals.goals).toMatchObject([{ kind: 'app', app: 'org.readera', minutes: 20 }]);
+    expect(goals.rules).toMatchObject([{ apps: ['Instagram'], activity: 'task' }]);
+
+    await executeCoachTool(repo, ctx, 'set_limit', { apps: ['com.instagram.android'], minutes_per_day: 30 }, actions, client);
+    expect(await repo.listLimits(subjectId)).toEqual([{ packageName: 'com.instagram.android', dailyMinutes: 30 }]);
+    await executeCoachTool(repo, ctx, 'add_interest', { topic: 'Stoicism' }, actions, client);
+    expect((await repo.selfProfile(userId))!.interests).toEqual(['Stoicism']);
+
+    await executeCoachTool(repo, ctx, 'start_focus', { app: 'org.readera', minutes: 15 }, actions, client);
+    expect(client).toContainEqual({ type: 'start_focus', app: 'org.readera', label: 'ReadEra', minutes: 15 });
+    await expect(executeCoachTool(repo, ctx, 'start_focus', { app: 'com.made.up', minutes: 5 }, actions, client)).rejects.toThrow(/Not installed/);
+    expect(actions.every((a) => a.ok)).toBe(true);
   });
 });

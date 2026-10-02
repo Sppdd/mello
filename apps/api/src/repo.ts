@@ -9,6 +9,9 @@ import type {
   InstalledApp,
   Kid,
   KidSettings,
+  SelfProfile,
+  SelfProfileInput,
+  UsageDay,
   Message,
   QuietHours,
   Rule,
@@ -27,6 +30,7 @@ const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v == null ? n
 
 const toKid = (r: Row): Kid => ({
   id: r.id,
+  kind: r.kind ?? 'kid',
   name: r.name,
   currentBookId: r.current_book_id ?? null,
   installedApps: r.installed_apps as InstalledApp[],
@@ -52,6 +56,7 @@ const toTask = (r: Row): Task => ({
   title: r.title,
   url: r.url ?? null,
   bookId: r.book_id ?? null,
+  appPackage: r.app_package ?? null,
   requiredMinutes: r.required_minutes,
   repeat: r.repeat,
   active: r.active,
@@ -125,16 +130,107 @@ export class Repo {
     );
   }
 
+  // ----- self mode (someone coaching their own phone) -----
+  /**
+   * Creates (or, on a new phone, re-issues) the user's self subject and returns a fresh device token.
+   * The old phone's token stops working. Reuses the user's family if they are also a parent.
+   */
+  async setupSelf(userId: string, name: string) {
+    const family = (await this.familyForUser(userId)) ?? (await this.createFamily(userId, 'Just me'));
+    const deviceToken = newToken();
+    const existing = await this.one<{ subject_id: string }>(`select subject_id from self_profiles where user_id = $1`, [userId]);
+    if (existing) {
+      await this.db.query(
+        `update kids set device_token_hash = $2, revoked_at = null, push_token = null, name = $3 where id = $1`,
+        [existing.subject_id, hashToken(deviceToken), name],
+      );
+      return { subjectId: existing.subject_id, deviceToken };
+    }
+    const subject = await this.one<{ id: string }>(
+      `insert into kids (family_id, name, device_token_hash, kind) values ($1, $2, $3, 'self') returning id`,
+      [family.id, name, hashToken(deviceToken)],
+    );
+    await this.db.query(`insert into self_profiles (user_id, subject_id) values ($1, $2)`, [userId, subject!.id]);
+    return { subjectId: subject!.id, deviceToken };
+  }
+  async selfProfile(userId: string): Promise<(SelfProfile & { familyId: string; revoked: boolean }) | null> {
+    const r = await this.one(
+      `select p.subject_id, p.interests, p.always_suggest, k.name, k.settings, k.family_id, k.revoked_at
+       from self_profiles p join kids k on k.id = p.subject_id where p.user_id = $1`,
+      [userId],
+    );
+    if (!r) return null;
+    return {
+      subjectId: r.subject_id,
+      name: r.name,
+      interests: r.interests ?? [],
+      alwaysSuggest: r.always_suggest,
+      character: KidSettingsSchema.parse(r.settings ?? {}).character,
+      familyId: r.family_id,
+      revoked: !!r.revoked_at,
+    };
+  }
+  async updateSelfProfile(userId: string, patch: SelfProfileInput) {
+    const p = await this.selfProfile(userId);
+    if (!p) return null;
+    if (patch.name) await this.db.query(`update kids set name = $2 where id = $1`, [p.subjectId, patch.name]);
+    if (patch.character) await this.db.query(`update kids set settings = settings || $2::jsonb where id = $1`, [p.subjectId, JSON.stringify({ character: patch.character })]);
+    if (patch.interests || patch.alwaysSuggest !== undefined) {
+      await this.db.query(`update self_profiles set interests = coalesce($2, interests), always_suggest = coalesce($3, always_suggest) where user_id = $1`, [
+        userId,
+        patch.interests ?? null,
+        patch.alwaysSuggest ?? null,
+      ]);
+    }
+    return this.selfProfile(userId);
+  }
+  /** Upserts one day of aggregates and drops anything older than 30 days. */
+  async putUsageDay(subjectId: string, usage: UsageDay) {
+    const { day, ...data } = usage;
+    await this.db.query(
+      `insert into usage_days (subject_id, day, data) values ($1, $2::date, $3::jsonb)
+       on conflict (subject_id, day) do update set data = excluded.data, updated_at = now()`,
+      [subjectId, day, JSON.stringify(data)],
+    );
+    await this.db.query(`delete from usage_days where subject_id = $1 and day < current_date - 30`, [subjectId]);
+  }
+  /** Most recent first. */
+  async usageDays(subjectId: string, days: number): Promise<UsageDay[]> {
+    const rows = await this.db.query(
+      `select to_char(day, 'YYYY-MM-DD') as day, data from usage_days where subject_id = $1 order by day desc limit $2`,
+      [subjectId, Math.max(1, Math.min(days, 30))],
+    );
+    return rows.map((r) => ({ day: r.day, ...r.data }) as UsageDay);
+  }
+  async addReflection(subjectId: string, r: { title: string | null; questions: string[]; answers: string[]; reply: string | null }) {
+    await this.db.query(`insert into reflections (subject_id, title, questions, answers, reply) values ($1, $2, $3::jsonb, $4::jsonb, $5)`, [
+      subjectId,
+      r.title,
+      JSON.stringify(r.questions),
+      JSON.stringify(r.answers),
+      r.reply,
+    ]);
+  }
+  async recentReflections(subjectId: string, limit = 5) {
+    const rows = await this.db.query(`select title, answers, created_at from reflections where subject_id = $1 order by created_at desc limit $2`, [subjectId, limit]);
+    return rows.map((r) => ({ title: r.title as string | null, answers: r.answers as string[], createdAt: iso(r.created_at)! }));
+  }
+  /** "Delete my data": usage, reflections, sessions and alerts. Rules and goals stay so the phone keeps working. */
+  async deleteSelfData(subjectId: string) {
+    for (const table of ['usage_days', 'reflections']) await this.db.query(`delete from ${table} where subject_id = $1`, [subjectId]);
+    for (const table of ['sessions', 'alerts', 'challenges', 'task_progress']) await this.db.query(`delete from ${table} where kid_id = $1`, [subjectId]);
+  }
+
   // ----- kids -----
   async listKids(familyId: string): Promise<Kid[]> {
-    return (await this.db.query(`select * from kids where family_id = $1 and revoked_at is null order by created_at`, [familyId])).map(toKid);
+    return (await this.db.query(`select * from kids where family_id = $1 and kind = 'kid' and revoked_at is null order by created_at`, [familyId])).map(toKid);
   }
   async getKid(familyId: string, kidId: string): Promise<Kid | null> {
     const r = await this.one(`select * from kids where id = $1 and family_id = $2 and revoked_at is null`, [kidId, familyId]);
     return r ? toKid(r) : null;
   }
   async findKidByName(familyId: string, name: string): Promise<Kid | null> {
-    const r = await this.one(`select * from kids where family_id = $1 and revoked_at is null and lower(name) = lower($2)`, [familyId, name.trim()]);
+    const r = await this.one(`select * from kids where family_id = $1 and kind = 'kid' and revoked_at is null and lower(name) = lower($2)`, [familyId, name.trim()]);
     return r ? toKid(r) : null;
   }
   async updateDevice(kidId: string, d: { pushToken?: string | null; installedApps?: InstalledApp[] | null; status?: DeviceStatus | null }) {
@@ -250,8 +346,8 @@ export class Repo {
   async addTask(familyId: string, kidId: string, input: TaskInput): Promise<Task> {
     if (input.bookId && !(await this.getBook(familyId, input.bookId))) throw new NotFound('Book not found');
     const r = await this.one(
-      `insert into tasks (kid_id, kind, title, url, book_id, required_minutes, repeat) values ($1, $2, $3, $4, $5, $6, $7) returning *`,
-      [kidId, input.kind, input.title, input.url, input.bookId, input.requiredMinutes, input.repeat],
+      `insert into tasks (kid_id, kind, title, url, book_id, app_package, required_minutes, repeat) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
+      [kidId, input.kind, input.title, input.url, input.bookId, input.appPackage, input.requiredMinutes, input.repeat],
     );
     return toTask(r!);
   }
@@ -432,7 +528,7 @@ export class Repo {
   async listAlerts(familyId: string, unseenOnly = true): Promise<Alert[]> {
     const rows = await this.db.query(
       `select a.*, k.name as kid_name from alerts a join kids k on k.id = a.kid_id
-       where k.family_id = $1 ${unseenOnly ? 'and a.seen_at is null' : ''} order by a.created_at desc limit 50`,
+       where k.family_id = $1 and k.kind = 'kid' ${unseenOnly ? 'and a.seen_at is null' : ''} order by a.created_at desc limit 50`,
       [familyId],
     );
     return rows.map((r) => ({ id: r.id, kidId: r.kid_id, kidName: r.kid_name, kind: r.kind, detail: r.detail, createdAt: iso(r.created_at)! }));

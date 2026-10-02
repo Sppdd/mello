@@ -1,4 +1,4 @@
--- Supabase-only hardening for the Mello schema.
+-- Supabase-only hardening for the Mello schema. Apply after 001_core.sql and 003_self.sql.
 -- The Mello API is the only way in: it connects with the database role and enforces family scoping
 -- itself. The public Data API (anon/authenticated) gets no access to any table, and RLS is on
 -- everywhere as a second lock, with no policies, so even an accidental grant exposes nothing.
@@ -12,7 +12,8 @@ declare t text;
 begin
   foreach t in array array[
     'families', 'family_members', 'books', 'kids', 'tasks', 'task_progress', 'rules', 'app_limits',
-    'quiet_hours', 'challenges', 'sessions', 'messages', 'unpair_requests', 'alerts', 'locations'
+    'quiet_hours', 'challenges', 'sessions', 'messages', 'unpair_requests', 'alerts', 'locations',
+    'self_profiles', 'usage_days', 'reflections'
   ] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on table public.%I from anon, authenticated', t);

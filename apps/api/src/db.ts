@@ -10,6 +10,8 @@ export interface Db {
 }
 
 const SQL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'sql');
+/** Schema files that run on any Postgres; 002_supabase.sql only runs on Supabase. */
+const PORTABLE_SQL = ['001_core.sql', '003_self.sql'];
 
 /**
  * DATABASE_URL set → Supabase Postgres (production and shared dev).
@@ -40,7 +42,7 @@ async function openPglite(path: string): Promise<Db> {
   const { PGlite } = await import('@electric-sql/pglite');
   if (path !== 'memory://') mkdirSync(path, { recursive: true });
   const db = new PGlite(path);
-  await db.exec(readFileSync(join(SQL_DIR, '001_core.sql'), 'utf8'));
+  for (const file of PORTABLE_SQL) await db.exec(readFileSync(join(SQL_DIR, file), 'utf8'));
   return {
     query: async (text, params = []) => (await db.query(text, params)).rows as any,
     close: () => db.close(),

@@ -1,10 +1,18 @@
 import { z } from 'zod';
+import { CharacterId, CharacterPrefs } from './characters.ts';
+
+export * from './characters.ts';
 
 // ---------- Domain ----------
+
+export const AppCategory = z.enum(['social', 'video', 'reading', 'audio', 'game', 'other']);
+export type AppCategory = z.infer<typeof AppCategory>;
 
 export const InstalledApp = z.object({
   packageName: z.string(),
   label: z.string(),
+  /** Filled in by the phone from categoryFor(); older phones don't send it. */
+  category: AppCategory.optional(),
 });
 export type InstalledApp = z.infer<typeof InstalledApp>;
 
@@ -42,6 +50,10 @@ export const KidSettings = z.object({
   photoProof: z.boolean().default(false),
   /** Only count reading/listening time while the phone is held and the screen is on. */
   attentionChecks: z.boolean().default(true),
+  /** The kid's (or self user's) buddy and how it talks. */
+  character: CharacterPrefs.default(CharacterPrefs.parse({})),
+  /** Characters a kid may pick; empty means any kid-friendly one. */
+  allowedCharacters: z.array(CharacterId).default([]),
 });
 export type KidSettings = z.infer<typeof KidSettings>;
 
@@ -56,8 +68,13 @@ export const DeviceStatus = z.object({
 });
 export type DeviceStatus = z.infer<typeof DeviceStatus>;
 
+/** 'kid' is a paired child's phone; 'self' is someone coaching their own phone. */
+export const SubjectKind = z.enum(['kid', 'self']);
+export type SubjectKind = z.infer<typeof SubjectKind>;
+
 export const Kid = z.object({
   id: z.string(),
+  kind: SubjectKind.default('kid'),
   name: z.string(),
   currentBookId: z.string().nullable(),
   installedApps: z.array(InstalledApp),
@@ -69,7 +86,8 @@ export type Kid = z.infer<typeof Kid>;
 
 // ---------- Tasks: parent-assigned activities ----------
 
-export const TaskKind = z.enum(['audio', 'video', 'article', 'reading']);
+/** 'app' = spend N minutes inside another app (ReadEra, Audible, …), kept there by the focus lock. */
+export const TaskKind = z.enum(['audio', 'video', 'article', 'reading', 'app']);
 export type TaskKind = z.infer<typeof TaskKind>;
 
 export const Task = z.object({
@@ -79,6 +97,7 @@ export const Task = z.object({
   title: z.string(),
   url: z.string().nullable(),
   bookId: z.string().nullable(),
+  appPackage: z.string().nullable(),
   requiredMinutes: z.number().int().min(1).max(180),
   repeat: z.enum(['once', 'daily']),
   active: z.boolean(),
@@ -91,11 +110,13 @@ export const TaskInput = z
     title: z.string().min(1).max(120),
     url: z.url({ protocol: /^https?$/ }).nullable().default(null),
     bookId: z.string().nullable().default(null),
+    appPackage: z.string().min(1).max(200).nullable().default(null),
     requiredMinutes: z.number().int().min(1).max(180),
     repeat: z.enum(['once', 'daily']).default('daily'),
   })
-  .refine((t) => t.kind === 'reading' || !!t.url, { message: 'Audio, video and article tasks need a URL', path: ['url'] })
-  .refine((t) => t.kind !== 'video' || !t.url || youtubeId(t.url) !== null, { message: 'Video tasks must be a YouTube link', path: ['url'] });
+  .refine((t) => t.kind === 'reading' || t.kind === 'app' || !!t.url, { message: 'Audio, video and article tasks need a URL', path: ['url'] })
+  .refine((t) => t.kind !== 'video' || !t.url || youtubeId(t.url) !== null, { message: 'Video tasks must be a YouTube link', path: ['url'] })
+  .refine((t) => t.kind !== 'app' || (!!t.appPackage && !NEVER_BLOCK.has(t.appPackage)), { message: 'App tasks need an app to open', path: ['appPackage'] });
 export type TaskInput = z.infer<typeof TaskInput>;
 
 /** Today's progress on a task, in seconds of verified activity. */
@@ -306,4 +327,171 @@ export function paginate(text: string, wordsPerPage = 180): string[] {
   }
   if (current.length) pages.push(current.join('\n\n'));
   return pages;
+}
+
+// ---------- Self mode: coaching your own phone ----------
+
+/** Well-known apps whose Android category is missing or too vague (e.g. YouTube says "video", Instagram says nothing). */
+const KNOWN_CATEGORIES: Record<string, AppCategory> = {
+  'com.instagram.android': 'social',
+  'com.zhiliaoapp.musically': 'social',
+  'com.ss.android.ugc.trill': 'social',
+  'com.facebook.katana': 'social',
+  'com.twitter.android': 'social',
+  'com.snapchat.android': 'social',
+  'com.reddit.frontpage': 'social',
+  'com.pinterest': 'social',
+  'com.linkedin.android': 'social',
+  'org.telegram.messenger': 'social',
+  'com.google.android.youtube': 'video',
+  'com.netflix.mediaclient': 'video',
+  'tv.twitch.android.app': 'video',
+  'org.readera': 'reading',
+  'org.readera.premium': 'reading',
+  'com.amazon.kindle': 'reading',
+  'com.google.android.apps.books': 'reading',
+  'com.kobobooks.android': 'reading',
+  'com.medium.reader': 'reading',
+  'com.getpocket.android': 'reading',
+  'com.audible.application': 'audio',
+  'com.spotify.music': 'audio',
+  'com.google.android.apps.podcasts': 'audio',
+  'au.com.shiftyjelly.pocketcasts': 'audio',
+  'com.storytel': 'audio',
+};
+
+/**
+ * Category for an app. `androidCategory` is ApplicationInfo.category (API 26+):
+ * 0 game, 1 audio, 2 video, 3 image, 4 social, 5 news, 6 maps, 7 productivity.
+ */
+export function categoryFor(packageName: string, androidCategory?: number | null): AppCategory {
+  const known = KNOWN_CATEGORIES[packageName];
+  if (known) return known;
+  switch (androidCategory) {
+    case 0:
+      return 'game';
+    case 1:
+      return 'audio';
+    case 2:
+      return 'video';
+    case 4:
+      return 'social';
+    case 5:
+      return 'reading';
+    default:
+      return 'other';
+  }
+}
+
+/** One day of phone use, aggregated on the phone. This (not raw events) is all that leaves it. */
+export const UsageDay = z.object({
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  apps: z
+    .array(z.object({ packageName: z.string().max(200), label: z.string().max(80), category: AppCategory, minutes: z.number().int().min(0).max(1440), opens: z.number().int().min(0).max(5000) }))
+    .max(15),
+  /** Minutes per category across all apps, including ones not in the top list. */
+  categories: z.partialRecord(AppCategory, z.number().int().min(0).max(1440)),
+  /** Times the phone was unlocked. */
+  unlocks: z.number().int().min(0).max(5000),
+  /** Share of the day (0–1) the guard (accessibility service) was on, from the phone's heartbeat. */
+  guardOn: z.number().min(0).max(1),
+  /** Minutes spent in focus sessions. */
+  focusMinutes: z.number().int().min(0).max(1440).default(0),
+  breakGlass: z.number().int().min(0).max(100).default(0),
+  /** At least one goal met that day (a focus/reading task done, or every limit respected). */
+  goalMet: z.boolean().default(false),
+});
+export type UsageDay = z.infer<typeof UsageDay>;
+
+export const SelfProfile = z.object({
+  subjectId: z.string(),
+  name: z.string(),
+  interests: z.array(z.string()),
+  alwaysSuggest: z.boolean(),
+  character: CharacterPrefs,
+});
+export type SelfProfile = z.infer<typeof SelfProfile>;
+
+export const SelfProfileInput = z.object({
+  name: z.string().trim().min(1).max(40).optional(),
+  interests: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  alwaysSuggest: z.boolean().optional(),
+  character: CharacterPrefs.optional(),
+});
+export type SelfProfileInput = z.infer<typeof SelfProfileInput>;
+
+/** Something the coach wants the phone to do; the phone asks the user before running it. */
+export const ClientAction = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('start_focus'), app: z.string(), label: z.string(), minutes: z.number().int().min(1).max(180) }),
+  z.object({ type: z.literal('refresh') }),
+]);
+export type ClientAction = z.infer<typeof ClientAction>;
+
+// ----- Streak -----
+
+export type StreakDay = { day: string; guardOn: number; goalMet: boolean };
+export type Streak = { current: number; best: number; frozen: string[]; todayDone: boolean };
+
+/** A day counts when the guard was on for most of it and at least one goal was met. */
+export const GUARD_ON_THRESHOLD = 0.9;
+
+const dayNumber = (day: string) => Math.round(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10)) / 86_400_000);
+/** Monday-based week index, for "one freeze per week". */
+const weekOf = (n: number) => Math.floor((n + 3) / 7);
+
+/**
+ * Duolingo-style streak, counted back from `today`. Today doesn't break the streak while it's still
+ * in progress. One missed day per week is bridged by a freeze; a second miss in that week ends it.
+ */
+export function computeStreak(days: StreakDay[], today: string): Streak {
+  const good = new Set(days.filter((d) => d.guardOn >= GUARD_ON_THRESHOLD && d.goalMet).map((d) => dayNumber(d.day)));
+  const t = dayNumber(today);
+  const todayDone = good.has(t);
+
+  const run = (from: number, limit: number) => {
+    let count = 0;
+    const frozen: number[] = [];
+    const freezeWeeks = new Set<number>();
+    for (let n = from; n >= limit; n--) {
+      if (good.has(n)) {
+        count++;
+        continue;
+      }
+      // A freeze only bridges a gap between good days, never the oldest end of the run.
+      if (!freezeWeeks.has(weekOf(n)) && good.has(n - 1)) {
+        freezeWeeks.add(weekOf(n));
+        frozen.push(n);
+        continue;
+      }
+      break;
+    }
+    return { count, frozen };
+  };
+
+  const earliest = Math.min(t, ...[...good]);
+  const { count, frozen } = run(todayDone ? t : t - 1, earliest);
+  let best = count;
+  for (const n of good) best = Math.max(best, run(n, earliest).count);
+  const toDay = (n: number) => new Date(n * 86_400_000).toISOString().slice(0, 10);
+  return { current: count, best, frozen: frozen.map(toDay), todayDone };
+}
+
+// ----- Focus lock (mirrored in MelloAccessibilityService.kt) -----
+
+export type FocusState = { target: string; requiredMs: number; elapsedMs: number; lastActiveAt: number; gatedApp: string | null };
+
+/** Time in the target app only counts while the user has done something there recently. */
+export const FOCUS_IDLE_MS = 90_000;
+
+export type FocusDecision = 'count' | 'idle' | 'allow' | 'return' | 'done';
+
+/**
+ * What the gate does when `packageName` is in the foreground during a focus session.
+ * Mello itself and NEVER_BLOCK apps stay reachable, so break-glass and emergency calls always work.
+ */
+export function focusDecision(focus: FocusState, packageName: string, now: number, melloPackage = 'com.mello.app'): FocusDecision {
+  if (focus.elapsedMs >= focus.requiredMs) return 'done';
+  if (packageName === focus.target) return now - focus.lastActiveAt <= FOCUS_IDLE_MS ? 'count' : 'idle';
+  if (packageName === melloPackage || NEVER_BLOCK.has(packageName)) return 'allow';
+  return 'return';
 }

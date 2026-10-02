@@ -1,14 +1,9 @@
-import type OpenAI from 'openai';
 import { RuleInput, TaskInput } from '@mello/shared';
-import { llm, MODEL } from './llm.ts';
 import type { Repo } from './repo.ts';
 import { sendPush } from './push.ts';
+import { fn, runToolLoop, str, type AgentAction, type AgentTurn, type Tool } from './toolLoop.ts';
 
-type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
-type Tool = OpenAI.Chat.Completions.ChatCompletionTool;
-
-export type AgentTurn = { role: 'user' | 'assistant'; content: string };
-export type AgentAction = { tool: string; ok: boolean; summary: string };
+export type { AgentAction, AgentTurn } from './toolLoop.ts';
 
 const SYSTEM = `You are Mello, a helper that runs on a parent's children's phones and carries out the parent's instructions.
 You can: list the kids, see which apps are on each kid's phone, set reading rules (read N minutes before opening an app),
@@ -81,29 +76,8 @@ const tools: Tool[] = [
 ];
 
 export async function runAgent(repo: Repo, familyId: string, history: AgentTurn[]) {
-  const messages: ChatMessage[] = [{ role: 'system', content: SYSTEM }, ...history.slice(-20)];
-  const actions: AgentAction[] = [];
-
-  for (let step = 0; step < 8; step++) {
-    const res = await llm().chat.completions.create({ model: MODEL, temperature: 0.2, messages, tools });
-    const msg = res.choices[0]?.message;
-    if (!msg) break;
-    messages.push(msg);
-    if (!msg.tool_calls?.length) return { reply: msg.content ?? '', actions };
-
-    for (const call of msg.tool_calls) {
-      if (call.type !== 'function') continue;
-      let output: unknown;
-      try {
-        output = await executeTool(repo, familyId, call.function.name, JSON.parse(call.function.arguments || '{}'), actions);
-      } catch (err) {
-        output = { error: err instanceof Error ? err.message : String(err) };
-        actions.push({ tool: call.function.name, ok: false, summary: String((output as any).error) });
-      }
-      messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) });
-    }
-  }
-  return { reply: 'Sorry, I could not finish that. Please try rephrasing.', actions };
+  const { reply, actions, finished } = await runToolLoop(SYSTEM, tools, (name, args, actions) => executeTool(repo, familyId, name, args, actions), history);
+  return { reply: finished ? reply : 'Sorry, I could not finish that. Please try rephrasing.', actions };
 }
 
 export async function executeTool(repo: Repo, familyId: string, name: string, args: any, actions: AgentAction[]): Promise<unknown> {
@@ -205,11 +179,4 @@ export async function executeTool(repo: Repo, familyId: string, name: string, ar
     default:
       throw new Error(`Unknown tool ${name}`);
   }
-}
-
-function fn(name: string, description: string, properties: Record<string, unknown>, required: string[] = []): Tool {
-  return { type: 'function', function: { name, description, parameters: { type: 'object', properties, required } } };
-}
-function str(description: string) {
-  return { type: 'string', description };
 }
