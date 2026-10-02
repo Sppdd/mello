@@ -185,3 +185,21 @@ create table if not exists locations (
   recorded_at timestamptz not null default now()
 );
 create index if not exists locations_kid_recorded_idx on locations (kid_id, recorded_at desc);
+
+-- JSON columns must hold the right shape. Catches a driver double-encoding JSON into a string.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'kids_json_shapes') then
+    alter table kids add constraint kids_json_shapes check (
+      jsonb_typeof(installed_apps) = 'array'
+      and jsonb_typeof(settings) = 'object'
+      and jsonb_typeof(device_status) = 'object'
+    );
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'alerts_detail_object') then
+    alter table alerts add constraint alerts_detail_object check (jsonb_typeof(detail) = 'object');
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'challenges_questions_object') then
+    alter table challenges add constraint challenges_questions_object check (jsonb_typeof(questions) = 'object');
+  end if;
+end $$;

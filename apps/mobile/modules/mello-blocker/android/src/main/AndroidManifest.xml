@@ -1,4 +1,9 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+  <!-- Daily time limits: read how long each app was in the foreground today. Granted by the user
+       in Settings > Usage access; Mello explains why before opening that screen. -->
+  <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+
   <!-- Lets getInstalledApps() see launchable apps on Android 11+ without QUERY_ALL_PACKAGES. -->
   <queries>
     <intent>

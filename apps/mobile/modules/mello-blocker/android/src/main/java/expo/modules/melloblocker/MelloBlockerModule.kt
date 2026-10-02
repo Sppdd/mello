@@ -57,8 +57,33 @@ class MelloBlockerModule : Module() {
       BlockerStore.unlocks(context)
     }
 
+    /** Returns {packageName, reason} ("rule" | "limit" | "bedtime") once, or null. */
     Function("consumePendingBlockedApp") {
-      BlockerStore.consumePending(context)
+      BlockerStore.consumePending(context)?.let { (pkg, reason) -> mapOf("packageName" to pkg, "reason" to reason) }
+    }
+
+    Function("setLimits") { limits: Map<String, Int> ->
+      BlockerStore.setLimits(context, limits)
+    }
+
+    /** startMinute/endMinute are minutes after local midnight; pass enabled=false to clear bedtime. */
+    Function("setQuietHours") { enabled: Boolean, startMinute: Int, endMinute: Int, allowed: List<String> ->
+      BlockerStore.setQuietHours(context, if (enabled) BlockerStore.QuietHours(startMinute, endMinute, allowed.toSet()) else null)
+    }
+
+    Function("setBubble") { enabled: Boolean, lines: List<String> ->
+      BlockerStore.setBubble(context, enabled, lines)
+    }
+
+    Function("isUsageAccessGranted") { UsageTracker.hasAccess(context) }
+
+    Function("openUsageAccessSettings") {
+      context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    /** Minutes in the foreground today per app (only apps used today). Empty without Usage Access. */
+    AsyncFunction("getUsageToday") {
+      UsageTracker.foregroundMsToday(context).mapValues { (_, ms) -> (ms / 60_000L).toInt() }.filterValues { it > 0 }
     }
 
     Function("launchApp") { packageName: String ->
@@ -73,8 +98,8 @@ class MelloBlockerModule : Module() {
     private var instance: WeakReference<MelloBlockerModule>? = null
 
     /** Called by the accessibility service; reaches JS only if the app is running. */
-    fun emitBlocked(packageName: String) {
-      instance?.get()?.sendEvent("onBlockedAppOpened", mapOf("packageName" to packageName))
+    fun emitBlocked(packageName: String, reason: String) {
+      instance?.get()?.sendEvent("onBlockedAppOpened", mapOf("packageName" to packageName, "reason" to reason))
     }
   }
 }

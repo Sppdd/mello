@@ -15,9 +15,15 @@ public class MelloBlockerModule: Module {
     Function("openServiceSettings") {}
     AsyncFunction("getInstalledApps") { () -> [[String: String]] in [] }
     Function("setBlockedPackages") { (_: [String]) in }
+    Function("setLimits") { (_: [String: Int]) in }
+    Function("setQuietHours") { (_: Bool, _: Int, _: Int, _: [String]) in }
+    Function("setBubble") { (_: Bool, _: [String]) in }
+    Function("isUsageAccessGranted") { false }
+    Function("openUsageAccessSettings") {}
+    AsyncFunction("getUsageToday") { () -> [String: Int] in [:] }
     Function("unlock") { (_: String, _: Int) in }
     Function("getUnlocks") { () -> [String: Double] in [:] }
-    Function("consumePendingBlockedApp") { () -> String? in nil }
+    Function("consumePendingBlockedApp") { () -> [String: String]? in nil }
     Function("launchApp") { (_: String) -> Bool in false }
   }
 }

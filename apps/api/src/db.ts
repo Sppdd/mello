@@ -24,8 +24,12 @@ export async function openDb(opts: { url?: string; pglitePath?: string } = {}): 
 
 async function openPostgres(url: string): Promise<Db> {
   const { default: postgres } = await import('postgres');
+  // The repo passes JSON already stringified (that's what PGlite expects). postgres.js would
+  // JSON.stringify json/jsonb parameters again and store a string instead of an object, so its
+  // json serializers pass strings through untouched.
+  const json = (oid: number) => ({ to: oid, from: [oid], serialize: (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v)), parse: JSON.parse });
   // Supabase's transaction pooler (port 6543) doesn't support prepared statements.
-  const sql = postgres(url, { prepare: false, max: 5, idle_timeout: 30 });
+  const sql = postgres(url, { prepare: false, max: 5, idle_timeout: 30, types: { json: json(114), jsonb: json(3802) } as any });
   return {
     query: async (text, params = []) => (await sql.unsafe(text, params as any[])) as any,
     close: () => sql.end(),

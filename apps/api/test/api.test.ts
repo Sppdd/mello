@@ -107,7 +107,7 @@ describe('paginate', () => {
 
 let db: Db;
 beforeAll(async () => {
-  db = await openDb({ pglitePath: 'memory://' });
+  db = await openDb({ url: '', pglitePath: 'memory://' }); // never the real database
 });
 afterAll(async () => {
   await db.close();

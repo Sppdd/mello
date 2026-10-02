@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import type { Kid } from '@mello/shared';
+import type { Alert, Kid } from '@mello/shared';
 import { ApiError, parentApi, type Family, type UnpairRequest } from '@/lib/api';
 import { useParentSession, useSession } from '@/lib/session';
 import { Button, Card, colors, ErrorText, Field, Label, Muted, Screen, Title } from '@/components/ui';
@@ -14,12 +14,14 @@ export default function ParentHome() {
   const [kids, setKids] = useState<Kid[]>([]);
   const [hasPassword, setHasPassword] = useState(false);
   const [requests, setRequests] = useState<UnpairRequest[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<unknown>(null);
   const api = useMemo(() => parentApi(), []);
 
   const load = useCallback(() => {
-    Promise.all([api.family(), api.kids(), api.unpairRequests()])
-      .then(([f, k, r]) => {
+    Promise.all([api.family(), api.kids(), api.unpairRequests(), api.alerts()])
+      .then(([f, k, r, a]) => {
+        setAlerts(a);
         setFamily(f);
         setNoFamily(false);
         setHasPassword(f.hasPassword);
@@ -60,6 +62,18 @@ export default function ParentHome() {
           <Button title="Decline" variant="secondary" onPress={() => decide(r.id, false)} />
         </Card>
       ))}
+
+      {alerts.length > 0 && (
+        <Card>
+          <Label>Alerts</Label>
+          {alerts.slice(0, 5).map((a) => (
+            <Muted key={a.id}>
+              {new Date(a.createdAt).toLocaleString()} · {a.kidName}: {describeAlert(a, kids)}
+            </Muted>
+          ))}
+          <Button title="Mark as seen" variant="secondary" onPress={() => api.alertsSeen().then(load).catch(setError)} />
+        </Card>
+      )}
 
       <Card>
         <Label>Pair a kid's phone</Label>
@@ -167,4 +181,19 @@ function CreateFamily({ email, onCreate, onSignOut }: { email: string; onCreate:
       <Button title="Sign out" variant="secondary" onPress={onSignOut} />
     </Screen>
   );
+}
+
+function describeAlert(a: Alert, kids: Kid[]): string {
+  const pkg = typeof a.detail.app === 'string' ? a.detail.app : null;
+  const app = pkg ? (kids.find((k) => k.id === a.kidId)?.installedApps.find((x) => x.packageName === pkg)?.label ?? pkg) : 'an app';
+  switch (a.kind) {
+    case 'protection_off':
+      return a.detail.protection === 'gateEnabled' ? 'turned off the Mello reading gate' : `turned off ${String(a.detail.protection)}`;
+    case 'bedtime_attempt':
+      return `tried to open ${app} at bedtime`;
+    case 'limit_reached':
+      return `reached today's limit for ${app}`;
+    default:
+      return a.kind;
+  }
 }

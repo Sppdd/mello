@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
@@ -8,10 +8,11 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from 'expo-audio';
-import type { Book, Kid, Rule } from '@mello/shared';
+import type { AppLimit, Book, Kid, QuietHours, Rule, Task } from '@mello/shared';
 import { parentApi, type Report } from '@/lib/api';
 import { useParentSession } from '@/lib/session';
 import { Button, Card, Chip, ErrorText, Field, Label, Muted, Screen, Title } from '@/components/ui';
+import { BedtimeSection, LimitsSection, SettingsSection, TasksSection } from '@/components/parentSections';
 
 const MINUTE_OPTIONS = [1, 2, 5, 10, 15];
 const UNLOCK_OPTIONS = [15, 30, 60];
@@ -25,12 +26,26 @@ export default function KidDetail() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [report, setReport] = useState<Report | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [limits, setLimits] = useState<AppLimit[]>([]);
+  const [quiet, setQuiet] = useState<QuietHours | null | undefined>(undefined);
   const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     try {
-      const [kids, r, b, rep] = await Promise.all([api.kids(), api.rules(id), api.books(), api.report(id)]);
+      const [kids, r, b, rep, t, l, q] = await Promise.all([
+        api.kids(),
+        api.rules(id),
+        api.books(),
+        api.report(id),
+        api.tasks(id),
+        api.limits(id),
+        api.quietHours(id),
+      ]);
       setKid(kids.find((k) => k.id === id) ?? null);
+      setTasks(t);
+      setLimits(l);
+      setQuiet(q);
       setRules(r);
       setBooks(b);
       setReport(rep);
@@ -59,15 +74,26 @@ export default function KidDetail() {
           <Muted>
             {report.minutesRead} minutes read · {report.challengesPassed} quizzes passed · {report.challengesFailed} missed
           </Muted>
+          {report.tasks.map((t) => (
+            <Muted key={t.title}>
+              {t.title}: done {t.completedDays} day{t.completedDays === 1 ? '' : 's'} · {t.minutes} min
+            </Muted>
+          ))}
         </Card>
       )}
+
+      {kid && <TasksSection kid={kid} tasks={tasks} api={api} onChange={load} />}
+      {kid && <LimitsSection kid={kid} limits={limits} api={api} onChange={load} />}
+      {kid && quiet !== undefined && <BedtimeSection key={JSON.stringify(quiet)} kid={kid} quiet={quiet} api={api} onChange={load} />}
 
       <Title>Reading rules</Title>
       {rules.length === 0 && <Muted>No rules yet. Every app opens freely.</Muted>}
       {rules.map((r) => (
         <Card key={r.id}>
           <Label>
-            Read {r.minutesRequired} min → open {r.apps.map(appLabel).join(', ')}
+            {r.activity === 'task'
+              ? `Finish "${tasks.find((t) => t.id === r.taskId)?.title ?? 'task'}" → open ${r.apps.map(appLabel).join(', ')}`
+              : `Read ${r.minutesRequired} min → open ${r.apps.map(appLabel).join(', ')}`}
           </Label>
           <Muted>Stays unlocked for {r.unlockMinutes} min</Muted>
           <Button title="Delete rule" variant="secondary" onPress={() => api.deleteRule(r.id).then(load).catch(setError)} />
@@ -85,6 +111,8 @@ export default function KidDetail() {
 
       <Title>Message</Title>
       <SendMessage kidId={id} api={api} />
+
+      {kid && <SettingsSection kid={kid} api={api} onChange={load} />}
     </Screen>
   );
 }
@@ -153,11 +181,6 @@ function SendMessage({ kidId, api }: { kidId: string; api: ReturnType<typeof par
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const state = useAudioRecorderState(recorder);
 
-  useEffect(() => {
-    requestRecordingPermissionsAsync().then((p) => {
-      if (p.granted) setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
-    });
-  }, []);
 
   const send = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -193,6 +216,10 @@ function SendMessage({ kidId, api }: { kidId: string; api: ReturnType<typeof par
         busy={busy}
         onPress={async () => {
           if (!state.isRecording) {
+            // Ask for the microphone only when the parent actually wants to record.
+            const perm = await requestRecordingPermissionsAsync();
+            if (!perm.granted) return setError(new Error('Microphone permission is needed to record a message.'));
+            await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
             await recorder.prepareToRecordAsync();
             recorder.record();
             return;

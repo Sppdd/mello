@@ -3,10 +3,10 @@ import { AppState, Text } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import type { KidConfig, Message } from '@mello/shared';
-import { MelloBlocker } from '../../../modules/mello-blocker';
+import { MelloBlocker, type PendingBlock } from '../../../modules/mello-blocker';
 import { useKidSession, useSession } from '@/lib/session';
-import { isUnpaired } from '@/lib/api';
-import { cachedConfig, clearKidDevice, playPendingMessages, syncKid } from '@/lib/kid';
+import { isUnpaired, kidApi } from '@/lib/api';
+import { cachedConfig, clearKidDevice, playPendingMessages, suggestions, syncKid } from '@/lib/kid';
 import { Button, Card, colors, Label, Muted, Screen, Title } from '@/components/ui';
 
 export default function KidHome() {
@@ -15,14 +15,31 @@ export default function KidHome() {
   const [config, setConfig] = useState<KidConfig | null>(() => cachedConfig());
   const [gateOn, setGateOn] = useState(() => MelloBlocker.isServiceEnabled());
   const [nowPlaying, setNowPlaying] = useState<Message | null>(null);
+  const [usageOn, setUsageOn] = useState(() => MelloBlocker.isUsageAccessGranted());
+  const [stopped, setStopped] = useState<PendingBlock | null>(null);
 
-  const openGate = useCallback((packageName: string) => {
-    router.push({ pathname: '/kid/read', params: { gate: packageName } });
-  }, []);
+  const appLabel = (pkg: string) => config?.kid.installedApps.find((a) => a.packageName === pkg)?.label ?? pkg;
+
+  // Read-first rules open the reader; a used-up limit or bedtime just explains why the app can't open.
+  const openGate = useCallback(
+    (block: PendingBlock) => {
+      if (block.reason === 'rule') {
+        setStopped(null);
+        router.push({ pathname: '/kid/read', params: { gate: block.packageName } });
+        return;
+      }
+      setStopped(block);
+      kidApi(session.token)
+        .alert(block.reason === 'bedtime' ? 'bedtime_attempt' : 'limit_reached', { app: block.packageName })
+        .catch(() => {});
+    },
+    [session.token],
+  );
 
   const refresh = useCallback(
     async (uploadDevice = false) => {
       setGateOn(MelloBlocker.isServiceEnabled());
+      setUsageOn(MelloBlocker.isUsageAccessGranted());
       try {
         const c = await syncKid(session.token, { uploadDevice });
         if (c) setConfig(c);
@@ -75,6 +92,7 @@ export default function KidHome() {
   }, [openGate, refresh]);
 
   const blockedCount = new Set(config?.rules.filter((r) => r.enabled).flatMap((r) => r.apps)).size;
+  const todo = config ? suggestions(config) : [];
 
   return (
     <Screen>
@@ -84,6 +102,37 @@ export default function KidHome() {
         <Card>
           <Label>🔊 Message from home</Label>
           {nowPlaying.text && <Text style={{ fontSize: 18, color: colors.ink }}>{nowPlaying.text}</Text>}
+        </Card>
+      )}
+
+      {stopped && (
+        <Card>
+          <Label>{stopped.reason === 'bedtime' ? '🌙 It’s bedtime' : `⏰ ${appLabel(stopped.packageName)} is done for today`}</Label>
+          <Muted>
+            {stopped.reason === 'bedtime'
+              ? `${appLabel(stopped.packageName)} is off until morning. Your parent can see that you tried.`
+              : 'You used today’s time for this app. It opens again tomorrow.'}
+          </Muted>
+          <Button title="OK" variant="secondary" onPress={() => setStopped(null)} />
+        </Card>
+      )}
+
+      {todo.length > 0 && (
+        <Card>
+          <Label>To do</Label>
+          {todo.map((line) => (
+            <Text key={line} style={{ fontSize: 16, color: colors.ink }}>
+              • {line}
+            </Text>
+          ))}
+        </Card>
+      )}
+
+      {MelloBlocker.isSupported() && gateOn && !usageOn && (config?.limits.length ?? 0) > 0 && (
+        <Card>
+          <Label>Allow time limits (ask a grown-up)</Label>
+          <Muted>Your parent set daily time limits. Turn on "Usage access" for Mello so it can count today's minutes per app.</Muted>
+          <Button title="Open settings" onPress={() => MelloBlocker.openUsageAccessSettings()} />
         </Card>
       )}
 

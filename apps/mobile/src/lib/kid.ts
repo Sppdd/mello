@@ -27,7 +27,7 @@ export async function syncKid(token: string, opts: { uploadDevice?: boolean } = 
       .updateDevice({
         pushToken,
         installedApps: apps.length ? apps : null,
-        status: { gateEnabled: MelloBlocker.isServiceEnabled() },
+        status: { gateEnabled: MelloBlocker.isServiceEnabled(), usageAccessEnabled: MelloBlocker.isUsageAccessGranted() },
       })
       .catch((e) => console.warn('[sync] device upload failed', e));
   }
@@ -45,9 +45,34 @@ export async function syncKid(token: string, opts: { uploadDevice?: boolean } = 
   }
 }
 
+/** Hands the family's rules to the native gate, which enforces them even when Mello isn't open. */
 function applyRules(config: KidConfig) {
   const blocked = new Set(config.rules.filter((r) => r.enabled).flatMap((r) => r.apps));
   MelloBlocker.setBlockedPackages([...blocked]);
+  MelloBlocker.setLimits(Object.fromEntries(config.limits.map((l) => [l.packageName, l.dailyMinutes])));
+  MelloBlocker.setQuietHours(config.quietHours);
+  MelloBlocker.setBubble(true, suggestions(config));
+}
+
+/** Short "what to do next" lines for the floating bubble and the home screen. */
+export function suggestions(config: KidConfig): string[] {
+  const label = (pkg: string) => config.kid.installedApps.find((a) => a.packageName === pkg)?.label ?? pkg;
+  const lines: string[] = [];
+  for (const t of config.tasks) {
+    const p = config.taskProgress.find((x) => x.taskId === t.id);
+    if (p?.completed) continue;
+    const left = Math.max(1, Math.ceil(t.requiredMinutes - (p?.seconds ?? 0) / 60));
+    const verb = { audio: 'Listen to', video: 'Watch', article: 'Read', reading: 'Read' }[t.kind];
+    lines.push(`${verb} "${t.title}" (${left} min left)`);
+  }
+  for (const r of config.rules.filter((r) => r.enabled && r.activity === 'reading')) {
+    lines.push(`Read ${r.minutesRequired} min to open ${r.apps.map(label).join(', ')}`);
+  }
+  if (config.quietHours?.enabled) {
+    const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    lines.push(`Bedtime ${hm(config.quietHours.startMinute)}–${hm(config.quietHours.endMinute)}`);
+  }
+  return lines.slice(0, 4);
 }
 
 /** Turns the gate off and forgets this kid's data. Call only after the backend has signed the phone out. */
