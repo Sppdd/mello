@@ -2,30 +2,35 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import type { Kid } from '@mello/shared';
-import { parentApi, type UnpairRequest } from '@/lib/api';
+import { ApiError, parentApi, type Family, type UnpairRequest } from '@/lib/api';
 import { useParentSession, useSession } from '@/lib/session';
 import { Button, Card, colors, ErrorText, Field, Label, Muted, Screen, Title } from '@/components/ui';
 
 export default function ParentHome() {
   const session = useParentSession();
   const { signOut } = useSession();
-  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [family, setFamily] = useState<Family | null>(null);
+  const [noFamily, setNoFamily] = useState(false);
   const [kids, setKids] = useState<Kid[]>([]);
   const [hasPassword, setHasPassword] = useState(false);
   const [requests, setRequests] = useState<UnpairRequest[]>([]);
   const [error, setError] = useState<unknown>(null);
-  const api = useMemo(() => parentApi(session.token), [session.token]);
+  const api = useMemo(() => parentApi(), []);
 
   const load = useCallback(() => {
     Promise.all([api.family(), api.kids(), api.unpairRequests()])
       .then(([f, k, r]) => {
-        setPairingCode(f.pairingCode);
+        setFamily(f);
+        setNoFamily(false);
         setHasPassword(f.hasPassword);
         setKids(k);
         setRequests(r);
         setError(null);
       })
-      .catch(setError);
+      .catch((e) => {
+        if (e instanceof ApiError && e.code === 'no_family') setNoFamily(true);
+        else setError(e);
+      });
   }, [api]);
 
   // No parent push yet, so check for sign-out requests every few seconds while this screen is open.
@@ -39,9 +44,12 @@ export default function ParentHome() {
 
   const decide = (id: string, approve: boolean) => api.decideUnpair(id, approve).then(load).catch(setError);
 
+  if (noFamily) return <CreateFamily email={session.email} onCreate={(name) => api.createFamily(name).then(load)} onSignOut={signOut} />;
+
   return (
     <Screen>
-      <Title>{session.familyName}</Title>
+      <Title>{family?.name ?? 'Family'}</Title>
+      <Muted>Signed in as {session.email}</Muted>
       <ErrorText error={error} />
 
       {requests.map((r) => (
@@ -56,7 +64,7 @@ export default function ParentHome() {
       <Card>
         <Label>Pair a kid's phone</Label>
         <Muted>Install Mello on their phone, choose "This is my kid's phone", and enter:</Muted>
-        <Text style={{ fontSize: 34, fontWeight: '700', letterSpacing: 6, color: colors.primary }}>{pairingCode ?? '······'}</Text>
+        <Text style={{ fontSize: 34, fontWeight: '700', letterSpacing: 6, color: colors.primary }}>{family?.pairingCode ?? '······'}</Text>
       </Card>
 
       <Label>Kids</Label>
@@ -77,7 +85,6 @@ export default function ParentHome() {
 
       <Button title="Ask Mello (agent)" onPress={() => router.push('/parent/agent')} />
       <Button title="Books" variant="secondary" onPress={() => router.push('/parent/books')} />
-      <Muted>Signing out removes the parent key from this phone. Kids stay paired, but this family can't be managed again from here.</Muted>
       <Button
         title="Sign out of this phone"
         variant="danger"
@@ -128,5 +135,36 @@ function SignOutPassword({ hasPassword, onSave }: { hasPassword: boolean; onSave
         <Button title={hasPassword ? 'Change password' : 'Set password'} variant="secondary" onPress={() => setEditing(true)} />
       )}
     </Card>
+  );
+}
+
+function CreateFamily({ email, onCreate, onSignOut }: { email: string; onCreate: (name: string) => Promise<unknown>; onSignOut: () => void }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  return (
+    <Screen>
+      <Title>Set up your family</Title>
+      <Muted>Signed in as {email}. Name your family to get a code for pairing your kids' phones.</Muted>
+      <Field label="Family name" value={name} onChangeText={setName} placeholder="The Smiths" />
+      <ErrorText error={error} />
+      <Button
+        title="Create family"
+        busy={busy}
+        disabled={!name.trim()}
+        onPress={async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            await onCreate(name.trim());
+          } catch (e) {
+            setError(e);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+      <Button title="Sign out" variant="secondary" onPress={onSignOut} />
+    </Screen>
   );
 }

@@ -23,7 +23,13 @@ export async function syncKid(token: string, opts: { uploadDevice?: boolean } = 
   const api = kidApi(token);
   if (opts.uploadDevice) {
     const [pushToken, apps] = await Promise.all([registerForPush(), MelloBlocker.getInstalledApps().catch(() => [])]);
-    await api.updateDevice(pushToken, apps.length ? apps : null).catch((e) => console.warn('[sync] device upload failed', e));
+    await api
+      .updateDevice({
+        pushToken,
+        installedApps: apps.length ? apps : null,
+        status: { gateEnabled: MelloBlocker.isServiceEnabled() },
+      })
+      .catch((e) => console.warn('[sync] device upload failed', e));
   }
   try {
     const config = await api.config();

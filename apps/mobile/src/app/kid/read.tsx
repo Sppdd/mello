@@ -31,7 +31,7 @@ export default function Read() {
 
   // What the gate asks for, decided once when the screen opens.
   const decision = useMemo(() => (gate && config ? evaluateGate(config.rules, gate, MelloBlocker.getUnlocks()) : null), [gate, config]);
-  const rule = decision?.blocked ? decision.rule : null;
+  const rule = decision?.blocked && decision.reason === 'rule' ? decision.rule : null;
   const appLabel = config?.kid.installedApps.find((a) => a.packageName === gate)?.label ?? gate;
   const [requiredSeconds, setRequiredSeconds] = useState(() => (rule ? rule.minutesRequired * 60 : 0));
 
