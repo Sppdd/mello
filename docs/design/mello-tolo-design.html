@@ -1,0 +1,622 @@
+<title>Mello with Tolo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap">
+<style>
+/* Layout: a studio board — header with the state switcher, then phone frames on a wrapping grid, ending with the pose library. */
+:root {
+  --bg: #F3F8F7;
+  --surface: #FFFFFF;
+  --surface-2: #F1F6F5;
+  --line: #DCE8E5;
+  --fg: #2B1B3D;
+  --muted: #6E6680;
+  --teal: #14B8A6;
+  --teal-deep: #0F766E;
+  --teal-soft: #D5F5F0;
+  --sun: #FFC93C;
+  --sun-deep: #D99A0B;
+  --apricot: #FFB37A;
+  --coral: #FF6B5B;
+  --coral-deep: #C9402F;
+  --night: #2E2547;
+  --night-deep: #1A1430;
+  --bezel: #2B1B3D;
+  --font: "Nunito", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #140E1C; --surface: #1F1730; --surface-2: #281E3B; --line: #3A2E52;
+    --fg: #F4EEFB; --muted: #B3A8C8; --teal-soft: #123E3A; --bezel: #0A0710;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #140E1C; --surface: #1F1730; --surface-2: #281E3B; --line: #3A2E52;
+  --fg: #F4EEFB; --muted: #B3A8C8; --teal-soft: #123E3A; --bezel: #0A0710;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-weight: 700; font-size: 15px; line-height: 1.4; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 64px; display: flex; flex-direction: column; gap: 36px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 900; letter-spacing: -0.5px; }
+h2 { font-size: 22px; font-weight: 900; }
+p { margin: 0; }
+.muted { color: var(--muted); font-weight: 700; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand .lede { max-width: 46ch; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; padding: 4px; }
+.seg button { font: inherit; font-weight: 800; color: var(--muted); background: none; border: 0; border-radius: 12px; padding: 8px 12px; cursor: pointer; min-height: 40px; }
+.seg button[aria-pressed="true"] { background: var(--teal-soft); color: var(--teal-deep); }
+:root[data-theme="dark"] .seg button[aria-pressed="true"] { color: var(--teal); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .seg button[aria-pressed="true"] { color: var(--teal); } }
+.icon-btn { font: inherit; font-weight: 800; background: var(--surface); color: var(--fg); border: 2px solid var(--line); border-bottom-width: 4px; border-radius: 14px; padding: 8px 14px; cursor: pointer; min-height: 44px; }
+
+/* sections */
+.section { display: flex; flex-direction: column; gap: 14px; }
+.section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; align-items: start; justify-items: center; }
+.caption { max-width: 320px; text-align: center; color: var(--muted); font-size: 13px; }
+.frame-col { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+
+/* phone */
+.phone { width: 100%; max-width: 320px; aspect-ratio: 320 / 660; background: var(--bezel); border-radius: 44px; padding: 10px; box-shadow: 0 18px 40px -18px rgba(43, 27, 61, .45); }
+.screen { position: relative; width: 100%; height: 100%; background: var(--surface); border-radius: 34px; overflow: hidden; display: flex; flex-direction: column; }
+.status { display: flex; justify-content: space-between; padding: 12px 22px 4px; font-size: 12px; font-weight: 800; color: var(--fg); }
+.scroll { flex: 1; overflow-y: auto; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 12px; scrollbar-width: none; }
+.scroll::-webkit-scrollbar { display: none; }
+
+/* chunky buttons */
+.btn { font: inherit; font-weight: 900; text-transform: uppercase; letter-spacing: .8px; font-size: 14px; border: 0; border-radius: 16px; padding: 14px 16px; cursor: pointer; width: 100%; min-height: 50px; color: #fff; background: var(--teal); box-shadow: 0 4px 0 var(--teal-deep); transition: transform .06s, box-shadow .06s; }
+.btn:active { transform: translateY(4px); box-shadow: 0 0 0 var(--teal-deep); }
+.btn.ghost { background: var(--surface); color: var(--teal-deep); border: 2px solid var(--line); box-shadow: 0 4px 0 var(--line); }
+.btn.sun { background: var(--sun); color: #3A2600; box-shadow: 0 4px 0 var(--sun-deep); }
+.btn.coral { background: var(--coral); box-shadow: 0 4px 0 var(--coral-deep); }
+.btn.small { width: auto; min-height: 40px; padding: 9px 14px; font-size: 12px; border-radius: 12px; }
+.btn:focus-visible, .icon-btn:focus-visible, .seg button:focus-visible, .opt:focus-visible, .chip:focus-visible, .node:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+:root[data-theme="dark"] .btn.ghost { color: var(--teal); }
+
+/* cards, chips */
+.card { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; align-items: center; gap: 10px; }
+.between { justify-content: space-between; }
+.label { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.bubble { position: relative; background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 10px 12px; font-weight: 800; font-size: 15px; }
+.bubble::before { content: ""; position: absolute; left: -9px; top: 22px; width: 14px; height: 14px; background: var(--surface); border-left: 2px solid var(--line); border-bottom: 2px solid var(--line); transform: rotate(45deg); }
+.chip { font: inherit; font-weight: 800; border: 2px solid var(--line); border-bottom-width: 4px; background: var(--surface); color: var(--fg); border-radius: 14px; padding: 9px 12px; cursor: pointer; min-height: 44px; }
+.chip[aria-pressed="true"] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal-deep); }
+:root[data-theme="dark"] .chip[aria-pressed="true"] { color: var(--teal); }
+
+/* onboarding */
+.ob-top { display: flex; align-items: center; gap: 10px; padding: 6px 16px 0; }
+.ob-x { font: inherit; background: none; border: 0; color: var(--muted); font-size: 20px; cursor: pointer; width: 36px; height: 36px; }
+.progress { flex: 1; height: 16px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.progress > i { display: block; height: 100%; width: 0; background: var(--teal); border-radius: 99px; transition: width .35s ease; box-shadow: inset 0 -5px 0 rgba(0,0,0,.08), inset 0 4px 0 rgba(255,255,255,.35); }
+.ob-body { flex: 1; padding: 14px 18px 8px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; scrollbar-width: none; }
+.ob-title { font-size: 21px; font-weight: 900; line-height: 1.2; }
+.ob-foot { padding: 10px 18px 18px; border-top: 2px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.opt { font: inherit; display: flex; align-items: center; gap: 12px; text-align: left; border: 2px solid var(--line); border-bottom-width: 4px; background: var(--surface); color: var(--fg); border-radius: 16px; padding: 10px 12px; cursor: pointer; width: 100%; font-weight: 800; }
+.opt small { display: block; color: var(--muted); font-weight: 700; font-size: 12px; }
+.opt[aria-pressed="true"] { border-color: var(--teal); background: var(--teal-soft); }
+.opt .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; }
+.input { font: inherit; font-weight: 800; border: 2px solid var(--line); background: var(--surface-2); color: var(--fg); border-radius: 14px; padding: 12px; width: 100%; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pv { border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.pv.yes { background: var(--teal-soft); }
+.pv.no { background: var(--surface-2); }
+.pv li { list-style: none; display: flex; gap: 6px; }
+.pv ul { margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.toggle { width: 50px; height: 30px; border-radius: 99px; background: var(--line); position: relative; border: 0; cursor: pointer; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 2px 0 rgba(0,0,0,.15); }
+.toggle[aria-checked="true"] { background: var(--teal); }
+.toggle[aria-checked="true"]::after { left: 23px; }
+.comp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.comp { font: inherit; font-weight: 800; font-size: 12px; color: var(--fg); background: var(--surface); border: 2px solid var(--line); border-bottom-width: 4px; border-radius: 16px; padding: 6px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
+.comp[aria-pressed="true"] { border-color: var(--teal); background: var(--teal-soft); }
+.blob { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; color: #fff; font-size: 18px; border: 3px solid var(--bezel); }
+
+/* dashboard */
+.statbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 16px 8px; border-bottom: 2px solid var(--line); }
+.stat { display: flex; align-items: center; gap: 4px; font-weight: 900; font-size: 15px; }
+.stat.off { color: var(--muted); }
+.hero { display: flex; align-items: flex-end; gap: 6px; }
+.hero .bubble { flex: 1; margin-bottom: 18px; margin-left: 6px; }
+.path { position: relative; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 6px 0 4px; }
+.node { position: relative; font: inherit; width: 70px; height: 62px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center; color: #fff; }
+.node.done { background: var(--sun); box-shadow: 0 6px 0 var(--sun-deep); }
+.node.now { background: var(--teal); box-shadow: 0 6px 0 var(--teal-deep); }
+.node.locked { background: var(--surface-2); box-shadow: 0 6px 0 var(--line); color: var(--muted); }
+.node.now::after { content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 4px solid var(--teal); opacity: .35; animation: pulse 1.8s ease-out infinite; }
+@keyframes pulse { from { transform: scale(.92); opacity: .5; } to { transform: scale(1.15); opacity: 0; } }
+.node-label { position: absolute; top: 50%; transform: translateY(-50%); width: 104px; font-size: 12px; font-weight: 900; line-height: 1.25; }
+.start-tip { position: absolute; top: -34px; left: 50%; transform: translateX(-50%); background: var(--surface); color: var(--teal-deep); border: 2px solid var(--line); border-radius: 12px; padding: 4px 10px; font-size: 12px; font-weight: 900; white-space: nowrap; }
+.bar { height: 12px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 99px; }
+.tabs { display: flex; justify-content: space-around; border-top: 2px solid var(--line); padding: 8px 6px 12px; }
+.tab { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; font-weight: 900; color: var(--muted); border-radius: 12px; padding: 4px 6px; }
+.tab.on { color: var(--teal-deep); background: var(--teal-soft); outline: 2px solid var(--teal); }
+:root[data-theme="dark"] .tab.on { color: var(--teal); }
+.alert { border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; font-size: 13px; }
+.alert.warn { background: #FFF1D6; color: #5A3A00; }
+.alert.bad { background: #FFE3DF; color: #6B1A10; }
+.alert.night { background: var(--night); color: #F4EEFB; }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 10px; font-weight: 900; color: var(--muted); }
+.dot { width: 22px; height: 22px; border-radius: 50%; margin: 2px auto 0; display: grid; place-items: center; }
+.dot.on { background: var(--sun); }
+.dot.freeze { background: #BFE7FF; }
+.dot.off { background: var(--surface-2); border: 2px dashed var(--line); }
+.dot.today { outline: 3px solid var(--teal); outline-offset: 1px; }
+
+/* focus */
+.ring-wrap { position: relative; width: 210px; height: 210px; margin: 0 auto; }
+.ring-wrap svg { width: 100%; height: 100%; }
+.ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.big { font-size: 46px; font-weight: 900; line-height: 1; }
+.hold { position: relative; overflow: hidden; border: 2px solid var(--line); border-bottom-width: 4px; background: var(--surface); border-radius: 16px; min-height: 50px; display: grid; place-items: center; font-weight: 900; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
+.hold > i { position: absolute; inset: 0 auto 0 0; width: 0; background: #FFD9D3; }
+.hold > span { position: relative; text-transform: uppercase; letter-spacing: .8px; }
+
+/* floating window */
+.feed { position: absolute; inset: 0; background: #101014; display: flex; flex-direction: column; }
+.feed .post { margin: 10px 12px 0; border-radius: 14px; background: #24242C; height: 150px; }
+.feed .post.tall { height: 230px; background: linear-gradient(160deg, #3A3150, #1D2A3A); }
+.feed .meta { margin: 8px 14px 0; height: 10px; width: 60%; border-radius: 6px; background: #2C2C36; }
+.feed .meta.short { width: 35%; }
+.feed-top { display: flex; justify-content: space-between; padding: 14px 18px 4px; color: #E8E8EE; font-weight: 900; font-size: 13px; }
+.float { position: absolute; top: 90px; right: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; touch-action: none; z-index: 2; }
+.pill { display: flex; align-items: center; gap: 6px; padding: 5px 12px 5px 5px; border-radius: 99px; color: #fff; font-weight: 900; font-size: 13px; cursor: grab; box-shadow: 0 4px 0 rgba(0,0,0,.25); user-select: none; -webkit-user-select: none; }
+.pill .head { width: 30px; height: 30px; border-radius: 50%; background: #fff; display: grid; place-items: center; overflow: hidden; }
+.panel { width: 220px; background: #FFFFFF; color: #2B1B3D; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; box-shadow: 0 10px 24px -8px rgba(0,0,0,.5); }
+.panel .btn { font-size: 12px; min-height: 40px; padding: 9px; }
+
+/* home screen + widgets */
+.homescreen { position: absolute; inset: 0; background: linear-gradient(170deg, #0F766E 0%, #14B8A6 45%, #FFB37A 100%); padding: 40px 14px 14px; display: flex; flex-direction: column; gap: 14px; }
+.wgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 8px; }
+.wapp { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #fff; font-size: 10px; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.wapp i { width: 46px; height: 46px; border-radius: 14px; background: rgba(255,255,255,.85); display: block; }
+.widget { background: #FFFFFF; color: #2B1B3D; border-radius: 24px; padding: 12px; box-shadow: 0 6px 0 rgba(0,0,0,.12); }
+.w-2x2 { grid-column: span 2; aspect-ratio: 1; display: flex; flex-direction: column; justify-content: space-between; }
+.w-4x2 { grid-column: span 4; display: flex; gap: 12px; align-items: center; }
+.ringmini { position: relative; width: 62px; height: 62px; flex: none; }
+.ringmini svg { width: 100%; height: 100%; }
+.ringmini b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 900; }
+.widget .btn { font-size: 11px; min-height: 38px; padding: 8px 10px; }
+
+/* pose library */
+.poses { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.pose { background: var(--surface); border: 2px solid var(--line); border-bottom-width: 4px; border-radius: 20px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.pose b { font-size: 14px; font-weight: 900; }
+.pose small { font-size: 12px; color: var(--muted); font-weight: 700; }
+.pose code { font-size: 11px; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; color: var(--teal-deep); font-weight: 800; }
+:root[data-theme="dark"] .pose code { color: var(--teal); }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.sw { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 2px solid var(--line); border-radius: 14px; padding: 6px 10px 6px 6px; font-size: 12px; }
+.sw i { width: 26px; height: 26px; border-radius: 8px; border: 2px solid rgba(0,0,0,.12); }
+.tolo-bob { animation: bob 2.6s ease-in-out infinite; transform-origin: 50% 100%; }
+@keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .tolo-bob, .node.now::after { animation: none; } .progress > i { transition: none; } }
+@media (max-width: 420px) { .wrap { padding-inline: 16px; } .phone { border-radius: 38px; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <span id="brandTolo" aria-hidden="true"></span>
+      <div class="lede">
+        <h1>Mello with Tolo</h1>
+        <p class="muted">Design for self mode: onboarding, the dashboard, the floating window and two home-screen widgets. Switch the day below; Tolo's pose changes meaning with it.</p>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Simulated day">
+        <button type="button" data-state="good" aria-pressed="true">Good day</button>
+        <button type="button" data-state="risk" aria-pressed="false">Streak at risk</button>
+        <button type="button" data-state="off" aria-pressed="false">Guard off</button>
+        <button type="button" data-state="night" aria-pressed="false">Wind-down</button>
+      </div>
+      <button type="button" class="icon-btn" id="themeBtn">Dark</button>
+    </div>
+  </header>
+
+  <section class="section" aria-labelledby="s1">
+    <div class="section-head"><h2 id="s1">Onboarding</h2><span class="muted">Six short steps, one question each. Tap Continue.</span></div>
+    <div class="board">
+      <div class="frame-col">
+        <div class="phone"><div class="screen" id="onboarding"></div></div>
+        <p class="caption">Progress bar on top, one big choice per screen, Continue pinned at the bottom.</p>
+      </div>
+      <div class="frame-col">
+        <div class="phone"><div class="screen" id="dashboard"></div></div>
+        <p class="caption">Dashboard: stats bar, Tolo, today as a path of goals, habit snapshot. Tap the glowing goal.</p>
+      </div>
+      <div class="frame-col">
+        <div class="phone"><div class="screen" id="focus"></div></div>
+        <p class="caption">Focus session: time counts only while you're active in ReadEra. Hold 10 s to stop early.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="s2">
+    <div class="section-head"><h2 id="s2">Floating window and widgets</h2><span class="muted">Drag the bubble. Tap it to open.</span></div>
+    <div class="board">
+      <div class="frame-col">
+        <div class="phone"><div class="screen" id="floating"></div></div>
+        <div class="seg" role="group" aria-label="Bubble mode">
+          <button type="button" data-bubble="limit" aria-pressed="true">Daily limit</button>
+          <button type="button" data-bubble="focus" aria-pressed="false">Focus</button>
+          <button type="button" data-bubble="paused" aria-pressed="false">Paused</button>
+        </div>
+      </div>
+      <div class="frame-col">
+        <div class="phone"><div class="screen" id="widgets"></div></div>
+        <p class="caption">Streak (2×2) and Today's goals (4×2). Both follow the simulated day.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="s3">
+    <div class="section-head"><h2 id="s3">Tolo's poses</h2><span class="muted">Every pose means one thing in the app.</span></div>
+    <div class="poses" id="poses"></div>
+    <div class="swatches" id="swatches"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ---------- Tolo, drawn once and posed ----------
+  const C = { shell: "#14B8A6", pattern: "#0F766E", skin: "#FFB37A", belly: "#FFF4E0", ink: "#2B1B3D", gem: "#FFC93C", cheek: "#FF8C7A" };
+  const hex = (cx, cy, r, fill) => {
+    const p = [];
+    for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i + Math.PI / 6; p.push((cx + r * Math.cos(a)).toFixed(1) + "," + (cy + r * Math.sin(a)).toFixed(1)); }
+    return `<polygon points="${p.join(" ")}" fill="${fill}" stroke="${C.ink}" stroke-width="2"/>`;
+  };
+  const eyes = (mood, x, y) => {
+    const L = x - 7, R = x + 7;
+    const open = (dy = 0) => `<circle cx="${L}" cy="${y + dy}" r="4.6" fill="${C.ink}"/><circle cx="${R}" cy="${y + dy}" r="4.6" fill="${C.ink}"/><circle cx="${L + 1.6}" cy="${y + dy - 1.6}" r="1.5" fill="#fff"/><circle cx="${R + 1.6}" cy="${y + dy - 1.6}" r="1.5" fill="#fff"/>`;
+    const arc = (cx) => `<path d="M${cx - 5} ${y + 1} Q${cx} ${y - 5} ${cx + 5} ${y + 1}" stroke="${C.ink}" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+    const line = (cx) => `<path d="M${cx - 5} ${y} L${cx + 5} ${y}" stroke="${C.ink}" stroke-width="3" stroke-linecap="round"/>`;
+    switch (mood) {
+      case "proud": return arc(L) + arc(R);
+      case "sleepy": return line(L) + line(R);
+      case "worried": return open(1) + `<path d="M${L - 6} ${y - 9} L${L + 3} ${y - 6}" stroke="${C.ink}" stroke-width="2.5" stroke-linecap="round"/><path d="M${R + 6} ${y - 9} L${R - 3} ${y - 6}" stroke="${C.ink}" stroke-width="2.5" stroke-linecap="round"/>`;
+      case "stern": return open(0) + `<path d="M${L - 6} ${y - 7} L${L + 4} ${y - 9}" stroke="${C.ink}" stroke-width="2.5" stroke-linecap="round"/><path d="M${R + 6} ${y - 7} L${R - 4} ${y - 9}" stroke="${C.ink}" stroke-width="2.5" stroke-linecap="round"/>`;
+      case "think": return `<circle cx="${L}" cy="${y - 1}" r="4.6" fill="${C.ink}"/><circle cx="${R}" cy="${y - 1}" r="4.6" fill="${C.ink}"/><circle cx="${L + 1}" cy="${y - 3.5}" r="1.6" fill="#fff"/><circle cx="${R + 1}" cy="${y - 3.5}" r="1.6" fill="#fff"/>`;
+      default: return open(0);
+    }
+  };
+  const mouth = (mood, x, y) => {
+    const d = { happy: `M${x - 6} ${y} Q${x} ${y + 7} ${x + 6} ${y}`, proud: `M${x - 7} ${y - 1} Q${x} ${y + 10} ${x + 7} ${y - 1} Z`, sleepy: `M${x - 3} ${y + 2} Q${x} ${y + 4} ${x + 3} ${y + 2}`, worried: `M${x - 5} ${y + 4} Q${x} ${y - 1} ${x + 5} ${y + 4}`, stern: `M${x - 5} ${y + 2} L${x + 5} ${y + 2}`, think: `M${x - 3} ${y + 2} Q${x + 1} ${y + 4} ${x + 4} ${y + 1}` }[mood] || `M${x - 6} ${y} Q${x} ${y + 7} ${x + 6} ${y}`;
+    const fill = mood === "proud" ? C.ink : "none";
+    return `<path d="${d}" stroke="${C.ink}" stroke-width="3" fill="${fill}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  };
+  // pose: wave | read | listen | proud | peek | shell | shrug | moon | jump | think | point | stop | happy
+  function tolo(pose = "happy", size = 120) {
+    const mood = { wave: "happy", read: "happy", listen: "sleepy", proud: "proud", peek: "worried", shell: "sleepy", shrug: "happy", moon: "sleepy", jump: "proud", think: "think", point: "happy", stop: "stern", happy: "happy" }[pose];
+    const hx = pose === "peek" ? 100 : 86, hy = pose === "peek" ? 72 : 58, hr = pose === "peek" ? 16 : 22;
+    const lift = pose === "jump" ? -10 : 0;
+    let s = "";
+    const back = [], front = [];
+    // ground shadow
+    s += `<ellipse cx="60" cy="112" rx="${pose === "jump" ? 30 : 40}" ry="5" fill="${C.ink}" opacity=".15"/>`;
+    // extras behind the body
+    if (pose === "moon") back.push(`<path d="M22 14 a14 14 0 1 0 14 22 a11 11 0 1 1 -14 -22z" fill="${C.gem}" stroke="${C.ink}" stroke-width="2"/><circle cx="46" cy="10" r="2" fill="${C.gem}"/><circle cx="8" cy="40" r="1.6" fill="${C.gem}"/>`);
+    if (pose === "jump") back.push(["#14B8A6", "#FFC93C", "#FF6B5B", "#FFB37A"].map((c, i) => `<rect x="${10 + i * 28}" y="${8 + (i % 2) * 12}" width="7" height="12" rx="2" fill="${c}" transform="rotate(${i * 35 - 30} ${13 + i * 28} ${14 + (i % 2) * 12})"/>`).join(""));
+    if (pose === "think") back.push(`<circle cx="104" cy="22" r="3" fill="#fff" stroke="${C.ink}" stroke-width="2"/><ellipse cx="92" cy="12" rx="16" ry="9" fill="#fff" stroke="${C.ink}" stroke-width="2"/><circle cx="86" cy="12" r="2" fill="${C.ink}"/><circle cx="92" cy="12" r="2" fill="${C.ink}"/><circle cx="98" cy="12" r="2" fill="${C.ink}"/>`);
+    if (pose === "point") back.push(`<rect x="2" y="44" width="26" height="44" rx="6" fill="${C.ink}"/><rect x="5" y="49" width="20" height="33" rx="3" fill="#fff"/><path d="M9 58 h6 v14 h-6z M15 58 h6 v14 h-6z" fill="${C.shell}" stroke="${C.ink}" stroke-width="1.5"/>`);
+    s += `<g transform="translate(0 ${lift})">` + back.join("");
+    // tail + legs
+    if (pose !== "shell") {
+      s += `<path d="M20 80 L8 84 L20 88 Z" fill="${C.skin}" stroke="${C.ink}" stroke-width="2.5" stroke-linejoin="round"/>`;
+      [[26, 92], [44, 95], [64, 95], [80, 92]].forEach(([x, y]) => { s += `<rect x="${x}" y="${y - 10}" width="15" height="${pose === "jump" ? 14 : 16}" rx="7" fill="${C.skin}" stroke="${C.ink}" stroke-width="2.5"/>`; });
+    }
+    // head behind shell when peeking
+    const head = () => {
+      let h = "";
+      h += `<path d="M${hx - 2} ${hy - hr + 1} q-3 -9 -10 -10 q6 -1 10 6 q2 -9 10 -10 q-5 5 -10 14z" fill="#5BC26B" stroke="${C.ink}" stroke-width="2" stroke-linejoin="round"/>`;
+      h += `<circle cx="${hx}" cy="${hy}" r="${hr}" fill="${C.skin}" stroke="${C.ink}" stroke-width="3"/>`;
+      if (pose !== "peek") h += `<ellipse cx="${hx - 13}" cy="${hy + 8}" rx="4.5" ry="3" fill="${C.cheek}" opacity=".55"/><ellipse cx="${hx + 13}" cy="${hy + 8}" rx="4.5" ry="3" fill="${C.cheek}" opacity=".55"/>`;
+      h += eyes(mood, hx, hy - 2) + mouth(mood, hx, hy + 7);
+      if (pose === "listen") h += `<path d="M${hx - hr - 2} ${hy} a${hr + 2} ${hr + 2} 0 0 1 ${2 * hr + 4} 0" stroke="${C.ink}" stroke-width="4" fill="none"/><rect x="${hx - hr - 7}" y="${hy - 6}" width="10" height="16" rx="4" fill="${C.gem}" stroke="${C.ink}" stroke-width="2.5"/><rect x="${hx + hr - 3}" y="${hy - 6}" width="10" height="16" rx="4" fill="${C.gem}" stroke="${C.ink}" stroke-width="2.5"/>`;
+      return h;
+    };
+    if (pose === "peek") s += head();
+    // shell
+    s += `<path d="M14 86 Q14 34 58 30 Q100 34 100 86 Z" fill="${C.shell}" stroke="${C.ink}" stroke-width="3" stroke-linejoin="round"/>`;
+    s += hex(36, 64, 9, C.pattern) + hex(57, 60, 9, C.pattern) + hex(78, 64, 9, C.pattern) + hex(46, 78, 7, C.pattern) + hex(68, 78, 7, C.pattern);
+    s += hex(57, 42, 9, C.gem);
+    if (pose === "proud" || pose === "jump") s += `<g stroke="${C.gem}" stroke-width="3" stroke-linecap="round"><path d="M57 24 v-6"/><path d="M44 30 l-4 -4"/><path d="M70 30 l4 -4"/></g>`;
+    s += `<rect x="12" y="82" width="90" height="10" rx="5" fill="${C.belly}" stroke="${C.ink}" stroke-width="2.5"/>`;
+    if (pose === "moon") s += `<path d="M10 88 Q30 70 62 76 Q92 82 106 92 L106 100 Q60 104 10 100 Z" fill="#B8A6E6" stroke="${C.ink}" stroke-width="2.5"/>`;
+    if (pose === "shell") s += `<text x="70" y="26" font-family="Nunito, sans-serif" font-weight="900" font-size="16" fill="${C.ink}">Z</text><text x="84" y="16" font-family="Nunito, sans-serif" font-weight="900" font-size="12" fill="${C.ink}">z</text><text x="94" y="8" font-family="Nunito, sans-serif" font-weight="900" font-size="9" fill="${C.ink}">z</text><rect x="91" y="74" width="10" height="8" rx="4" fill="${C.skin}" stroke="${C.ink}" stroke-width="2"/>`;
+    if (pose !== "peek" && pose !== "shell") s += head();
+    // arms / props in front
+    const paw = (x, y, rot) => `<ellipse cx="${x}" cy="${y}" rx="6.5" ry="10" fill="${C.skin}" stroke="${C.ink}" stroke-width="2.5" transform="rotate(${rot} ${x} ${y})"/>`;
+    if (pose === "wave") front.push(paw(108, 38, 25));
+    if (pose === "read") front.push(`<path d="M58 70 L80 64 L102 70 L102 92 L80 86 L58 92 Z" fill="#fff" stroke="${C.ink}" stroke-width="2.5" stroke-linejoin="round"/><path d="M80 64 L80 86" stroke="${C.ink}" stroke-width="2"/><path d="M64 75 l11 -3 M64 80 l11 -3 M85 72 l11 3 M85 77 l11 3" stroke="${C.pattern}" stroke-width="1.6"/>` + paw(58, 82, -20) + paw(102, 82, 20));
+    if (pose === "proud") front.push(paw(108, 54, 15) + `<path d="M109 30 q-8 10 -3 16 q4 4 8 0 q4 -7 -5 -16z" fill="#FF8A3C" stroke="${C.ink}" stroke-width="2"/><path d="M110 38 q-3 4 0 7 q3 -2 0 -7z" fill="${C.gem}"/>`);
+    if (pose === "shrug") front.push(paw(62, 64, -55) + paw(110, 64, 55));
+    if (pose === "think") front.push(paw(92, 82, -10));
+    if (pose === "point") front.push(`<ellipse cx="38" cy="66" rx="12" ry="6" fill="${C.skin}" stroke="${C.ink}" stroke-width="2.5"/>`);
+    if (pose === "stop") front.push(`<path d="M110 92 L110 50" stroke="${C.ink}" stroke-width="3"/><circle cx="110" cy="38" r="14" fill="#FF6B5B" stroke="${C.ink}" stroke-width="2.5"/><rect x="102" y="35" width="16" height="6" rx="3" fill="#fff"/>` + paw(106, 70, 10));
+    if (pose === "jump") front.push(paw(64, 52, -40) + paw(110, 44, 40));
+    s += front.join("") + "</g>";
+    return `<svg viewBox="0 0 120 120" width="${size}" height="${size}" role="img" aria-label="Tolo the tortoise, ${pose}">${s}</svg>`;
+  }
+  const toloHead = (size = 30) => `<svg viewBox="62 30 48 48" width="${size}" height="${size}" aria-hidden="true"><circle cx="86" cy="56" r="20" fill="${C.skin}" stroke="${C.ink}" stroke-width="3"/>${eyes("happy", 86, 54)}${mouth("happy", 86, 63)}</svg>`;
+
+  // ---------- icons ----------
+  const I = {
+    flame: (on = true, s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3-1-3 0-6 1-9z" fill="${on ? "#FF9600" : "#C9C2D3"}"/><path d="M12 12c2 2 3 3 3 5a3 3 0 0 1-6 0c0-1 1-2 1-3 0 1 1 1 2 1-.5-1 0-2 0-3z" fill="${on ? "#FFC93C" : "#E4DEEA"}"/></svg>`,
+    gem: (s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="#FFC93C" stroke="#D99A0B" stroke-width="2"/></svg>`,
+    shield: (on = true, s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z" fill="${on ? "#14B8A6" : "#FF6B5B"}"/><path d="${on ? "M8 12l3 3 5-6" : "M9 9l6 6M15 9l-6 6"}" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>`,
+    book: (c = "#fff", s = 26) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M3 5c3-1 6-1 9 1 3-2 6-2 9-1v14c-3-1-6-1-9 1-3-2-6-2-9-1z" fill="none" stroke="${c}" stroke-width="2.4" stroke-linejoin="round"/><path d="M12 6v14" stroke="${c}" stroke-width="2.4"/></svg>`,
+    head: (c = "#fff", s = 26) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3" stroke="${c}" stroke-width="2.4" fill="none"/><rect x="3" y="14" width="5" height="7" rx="2" fill="${c}"/><rect x="16" y="14" width="5" height="7" rx="2" fill="${c}"/></svg>`,
+    moon: (c = "#fff", s = 26) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M20 14A8 8 0 1 1 10 4a7 7 0 0 0 10 10z" fill="${c}"/></svg>`,
+    lock: (c = "#fff", s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="3" fill="${c}"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="${c}" stroke-width="2.4" fill="none"/></svg>`,
+    check: (c = "#fff", s = 30) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M5 12l5 5 9-10" stroke="${c}" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    home: (s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" fill="currentColor"/></svg>`,
+    target: (s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.6"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>`,
+    chart: (s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><rect x="4" y="12" width="4" height="8" rx="1.5" fill="currentColor"/><rect x="10" y="7" width="4" height="13" rx="1.5" fill="currentColor"/><rect x="16" y="4" width="4" height="16" rx="1.5" fill="currentColor"/></svg>`,
+    chat: (s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" fill="currentColor"/></svg>`,
+    user: (s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 21c1-5 4-7 8-7s7 2 8 7z" fill="currentColor"/></svg>`,
+    eye: (s = 18) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`,
+  };
+  const ring = (pct, color, size = 62, stroke = 8, track = "#EDF3F2") => {
+    const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+    return `<svg viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${track}" stroke-width="${stroke}"/><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct)}" transform="rotate(-90 ${size / 2} ${size / 2})"/></svg>`;
+  };
+  const statusBar = (dark) => `<div class="status" ${dark ? 'style="color:#E8E8EE"' : ""}><span class="num">9:41</span><span>●●● ▮</span></div>`;
+
+  // ---------- simulated days ----------
+  const STATES = {
+    good: { pose: "proud", line: "12 days in a row. Small steps make a path!", streak: 12, flameOn: true, guard: true, todayDone: true, week: ["on", "on", "freeze", "on", "on", "on", "on"], goals: [1, 0.6, 0], soc: 34, socUsual: 72, read: 38, readUsual: 18 },
+    risk: { pose: "peek", line: "Your 12-day streak is waiting. One goal saves it.", streak: 12, flameOn: false, guard: true, todayDone: false, week: ["on", "on", "freeze", "on", "on", "on", "off"], goals: [0.2, 0, 0], soc: 96, socUsual: 72, read: 4, readUsual: 18 },
+    off: { pose: "shell", line: "I'm asleep while my guard is off. Wake me when you're ready.", streak: 12, flameOn: false, guard: false, todayDone: false, week: ["on", "on", "freeze", "on", "on", "on", "off"], goals: [0, 0, 0], soc: 58, socUsual: 72, read: 0, readUsual: 18 },
+    night: { pose: "moon", line: "Wind-down until 07:00. Audible still works.", streak: 13, flameOn: true, guard: true, todayDone: true, week: ["on", "freeze", "on", "on", "on", "on", "on"], goals: [1, 1, 0.5], soc: 22, socUsual: 72, read: 54, readUsual: 18 },
+  };
+  let state = "good";
+  const S = () => STATES[state];
+  const GOALS = [
+    { title: "20 min in ReadEra", icon: "book", sub: "before Instagram" },
+    { title: "15 min Audible", icon: "head", sub: "any time" },
+    { title: "Wind down 22:30", icon: "moon", sub: "until 07:00" },
+  ];
+
+  // ---------- onboarding ----------
+  const ob = { step: 0, who: "me", goals: new Set(["read", "scroll"]), name: "Sara", comp: "tolo", tone: "balanced", perms: { guard: true, usage: false, notif: true } };
+  const COMPANIONS = [["tolo", "Tolo", "#14B8A6"], ["mello", "Mello", "#5B5BD6"], ["pip", "Pip", "#E8833A"], ["sage", "Sage", "#3E6B5A"], ["bruno", "Bruno", "#8A5A3C"], ["luna", "Luna", "#2E3352"]];
+  function renderOnboarding() {
+    const el = document.getElementById("onboarding");
+    const steps = 6, i = ob.step;
+    let body = "", cta = "Continue", ctaDisabled = false, extra = "";
+    if (i === 0) {
+      body = `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center">
+        <div class="tolo-bob">${tolo("wave", 170)}</div>
+        <div class="ob-title" style="font-size:26px">Hi, I'm Tolo.</div>
+        <p class="muted">Small steps make a path. I'll help you scroll less and read and listen more, on your own phone.</p></div>`;
+      cta = "Get started"; extra = `<button class="btn ghost" type="button">I already have an account</button>`;
+    } else if (i === 1) {
+      const opts = [["me", "Just me", "Coach my own phone, privately.", "#14B8A6", I.user(24)], ["parent", "I'm a parent", "Set reading rules for my kids.", "#FFC93C", I.home(24)], ["kid", "This is my kid's phone", "Pair with a parent's code.", "#FFB37A", I.book("#2B1B3D", 24)]];
+      body = `<div class="row" style="align-items:flex-end">${tolo("think", 88)}<div class="bubble" style="flex:1;margin-bottom:14px">Who's this phone for?</div></div>
+        ${opts.map(([k, t, s, c, ic]) => `<button type="button" class="opt" data-who="${k}" aria-pressed="${ob.who === k}"><span class="ico" style="background:${c};color:#fff">${ic}</span><span>${t}<small>${s}</small></span></button>`).join("")}`;
+    } else if (i === 2) {
+      const g = [["scroll", "Scroll less"], ["read", "Read more"], ["listen", "Listen more"], ["sleep", "Sleep better"], ["learn", "Learn something"], ["focus", "Focus at work"]];
+      body = `<div class="ob-title">What do you want more of?</div><p class="muted">Pick any. You can change them later.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">${g.map(([k, t]) => `<button type="button" class="chip" data-goal="${k}" aria-pressed="${ob.goals.has(k)}">${t}</button>`).join("")}</div>
+        <label class="label" for="ob-name">What should I call you?</label><input class="input" id="ob-name" value="${ob.name}" autocomplete="given-name">`;
+      ctaDisabled = ob.goals.size === 0;
+    } else if (i === 3) {
+      body = `<div class="ob-title">Meet your companion</div>
+        <div class="comp-grid">${COMPANIONS.map(([k, n, c]) => `<button type="button" class="comp" data-comp="${k}" aria-pressed="${ob.comp === k}">${k === "tolo" ? tolo(ob.comp === k ? "proud" : "happy", 56) : `<span class="blob" style="background:${c}">${n[0]}</span>`}${n}</button>`).join("")}</div>
+        <span class="label">How should ${COMPANIONS.find((c) => c[0] === ob.comp)[1]} talk to you?</span>
+        <div class="seg" role="group" aria-label="Tone">${["gentle", "balanced", "firm"].map((t) => `<button type="button" data-tone="${t}" aria-pressed="${ob.tone === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>`;
+    } else if (i === 4) {
+      body = `<div class="row" style="align-items:flex-end">${tolo("point", 84)}<div class="bubble" style="flex:1;margin-bottom:14px">Only you see this. Here's my promise.</div></div>
+        <div class="pair">
+          <div class="pv yes"><span class="label" style="color:var(--teal-deep)">I see</span><ul><li>✓ Which app is open</li><li>✓ Minutes and opens per app</li><li>✓ Your goals</li></ul></div>
+          <div class="pv no"><span class="label">I never see</span><ul><li>✕ What's on screen</li><li>✕ Messages, photos</li><li>✕ Notifications</li><li>✕ Location</li></ul></div>
+        </div>
+        <p class="muted" style="font-size:13px">Only daily totals leave your phone, kept 30 days. Delete them any time in one tap.</p>`;
+      cta = "Sounds good";
+    } else if (i === 5) {
+      const P = [["guard", "Guard", "Lets me keep you in your reading app and hold back apps you chose. Sees app names only."], ["usage", "Usage access", "Counts minutes and opens per app for your habits page."], ["notif", "Notifications", "A nudge if your guard is switched off, at most 3 a day."]];
+      body = `<div class="ob-title">Three switches, then we're off</div>
+        ${P.map(([k, t, s]) => `<div class="card"><div class="row between"><strong>${t}</strong><button type="button" class="toggle" role="switch" data-perm="${k}" aria-checked="${ob.perms[k]}" aria-label="${t}"></button></div><p class="muted" style="font-size:13px">${s}</p></div>`).join("")}`;
+      cta = "Let's go";
+    } else {
+      body = `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center">
+        ${tolo("jump", 160)}<div class="ob-title" style="font-size:24px">You're set, ${ob.name || "friend"}!</div>
+        <p class="muted">Your first goal:</p>
+        <div class="card" style="width:100%"><div class="row"><span class="ico" style="width:40px;height:40px;border-radius:12px;background:var(--teal);display:grid;place-items:center">${I.book()}</span><span style="text-align:left">20 min in ReadEra<br><small class="muted">before Instagram opens</small></span></div></div></div>`;
+      cta = "Add this goal"; extra = `<button class="btn ghost" type="button" data-restart>Start over</button>`;
+    }
+    el.innerHTML = `${statusBar()}<div class="ob-top"><button type="button" class="ob-x" aria-label="Back" data-back>${i > 0 ? "←" : "✕"}</button><div class="progress" aria-label="Step ${Math.min(i + 1, steps)} of ${steps}"><i style="width:${(Math.min(i, steps) / steps) * 100}%"></i></div></div>
+      <div class="ob-body">${body}</div>
+      <div class="ob-foot"><button type="button" class="btn" data-next ${ctaDisabled ? "disabled style='opacity:.5'" : ""}>${cta}</button>${extra}</div>`;
+  }
+  document.getElementById("onboarding").addEventListener("click", (e) => {
+    const t = e.target.closest("button"); if (!t) return;
+    if (t.dataset.next !== undefined) { if (ob.step < 6) ob.step++; else ob.step = 0; }
+    else if (t.dataset.back !== undefined) { ob.step = Math.max(0, ob.step - 1); }
+    else if (t.dataset.restart !== undefined) { ob.step = 0; }
+    else if (t.dataset.who) ob.who = t.dataset.who;
+    else if (t.dataset.goal) { ob.goals.has(t.dataset.goal) ? ob.goals.delete(t.dataset.goal) : ob.goals.add(t.dataset.goal); }
+    else if (t.dataset.comp) ob.comp = t.dataset.comp;
+    else if (t.dataset.tone) ob.tone = t.dataset.tone;
+    else if (t.dataset.perm) ob.perms[t.dataset.perm] = !ob.perms[t.dataset.perm];
+    else return;
+    renderOnboarding();
+  });
+  document.getElementById("onboarding").addEventListener("input", (e) => { if (e.target.id === "ob-name") ob.name = e.target.value.trim(); });
+
+  // ---------- dashboard ----------
+  const DAYS = ["M", "T", "W", "T", "F", "S", "S"];
+  function renderDashboard() {
+    const s = S();
+    const el = document.getElementById("dashboard");
+    const nodes = GOALS.map((g, i) => {
+      const p = s.goals[i];
+      const cls = p >= 1 ? "done" : i === s.goals.findIndex((x) => x < 1) && s.guard ? "now" : "locked";
+      const off = [-36, 36, -36][i];
+      const ic = cls === "done" ? I.check() : cls === "locked" ? I.lock("#B3A8C8") : I[g.icon]();
+      const label = `<span class="node-label" style="${off <= 0 ? "left:80px" : "right:80px;text-align:right"}">${g.title}<br><span class="muted" style="font-size:11px">${cls === "done" ? "done" : g.sub}</span></span>`;
+      return `<div style="position:relative;transform:translateX(${off}px)"><button type="button" class="node ${cls}" aria-label="${g.title}, ${cls}">${ic}</button>${cls === "now" ? `<span class="start-tip">START</span>` : ""}${label}</div>`;
+    }).join("");
+    const banner = !s.guard ? `<div class="alert bad">${I.shield(false)}<span><strong>Guard is off.</strong> Goals and limits are paused. <u>Turn on</u></span></div>`
+      : state === "night" ? `<div class="alert night">${I.moon("#FFC93C", 22)}<span><strong>Wind-down</strong> until 07:00 · Audible allowed</span></div>`
+      : state === "risk" ? `<div class="alert warn">${I.flame(true, 22)}<span><strong>Streak at risk.</strong> Meet one goal before midnight.</span></div>` : "";
+    el.innerHTML = `${statusBar()}
+      <div class="statbar">
+        <span class="stat ${s.guard ? "" : "off"}">${I.shield(s.guard)}</span>
+        <span class="stat num ${s.flameOn ? "" : "off"}" style="color:${s.flameOn ? "#FF9600" : ""}">${I.flame(s.flameOn)} ${s.streak}</span>
+        <span class="stat num" style="color:var(--sun-deep)">${I.gem()} 340</span>
+        <span class="stat" style="color:var(--teal)">${toloHead(26)}</span>
+      </div>
+      <div class="scroll">
+        <div class="hero"><div class="tolo-bob">${tolo(s.pose, 104)}</div><div class="bubble">${s.line}</div></div>
+        ${banner}
+        <div class="card"><div class="row between"><span class="label">Streak</span><span class="label num">Best 21</span></div>
+          <div class="week">${s.week.map((w, i) => `<div>${DAYS[i]}<div class="dot ${w}${i === 6 ? " today" : ""}">${w === "on" ? I.flame(true, 14) : w === "freeze" ? "❄" : ""}</div></div>`).join("")}</div></div>
+        <div class="label" style="margin-top:4px">Today's path</div>
+        <div class="path">${nodes}</div>
+        <div class="card"><span class="label">Today vs your usual</span>
+          ${[["Social", s.soc, s.socUsual, "#FF6B5B"], ["Reading & listening", s.read, s.readUsual, "#14B8A6"]].map(([n, v, u, c]) => `<div><div class="row between" style="font-size:13px"><span>${n}</span><span class="num">${v} min <span class="muted">/ ${u}</span></span></div><div class="bar" style="position:relative"><i style="width:${Math.min(100, (v / 100) * 100)}%;background:${c}"></i><b style="position:absolute;top:-2px;bottom:-2px;left:${u}%;width:3px;border-radius:2px;background:var(--fg);opacity:.5"></b></div></div>`).join("")}
+        </div>
+      </div>
+      <nav class="tabs" aria-label="Sections">
+        <span class="tab on">${I.home()}Home</span><span class="tab">${I.target()}Focus</span><span class="tab">${I.chart()}Habits</span><span class="tab">${I.chat()}Talk</span><span class="tab">${I.user()}Me</span>
+      </nav>`;
+  }
+
+  // ---------- focus ----------
+  let holdTimer = null, holdStart = 0, stopped = false;
+  function renderFocus() {
+    const el = document.getElementById("focus");
+    if (stopped) {
+      el.innerHTML = `${statusBar()}<div class="scroll" style="align-items:center;justify-content:center;text-align:center">${tolo("shrug", 150)}<div class="ob-title">That's okay.</div><p class="muted">You read 12 min in ReadEra. It's logged, no judgement.</p><label class="label" for="why" style="align-self:flex-start">What pulled you away?</label><input id="why" class="input" placeholder="A call, a friend…"><button type="button" class="btn" data-restart-focus>Start again</button></div>`;
+      return;
+    }
+    const pct = 12 / 20;
+    el.innerHTML = `${statusBar()}
+      <div class="scroll" style="gap:14px">
+        <div class="row between"><span class="label">Focus · ReadEra</span><span class="label" style="color:#FF9600">${I.flame(true, 14)} counts for today</span></div>
+        <div class="ring-wrap">${ring(pct, "#14B8A6", 210, 18, "var(--surface-2)")}<div class="ring-center"><div style="margin-top:-6px">${tolo("read", 92)}</div><div class="big num">8</div><div class="muted">min left</div></div></div>
+        <div class="bubble" style="margin-left:6px">Turn a page now and then. Time pauses after 90 s of stillness.</div>
+        <button type="button" class="btn">Back to ReadEra</button>
+        <div class="hold" id="hold" role="button" tabindex="0" aria-label="Hold for ten seconds to stop the session"><i></i><span>Hold to stop</span></div>
+      </div>`;
+  }
+  const focusEl = document.getElementById("focus");
+  const endHold = () => { if (holdTimer) cancelAnimationFrame(holdTimer); holdTimer = null; const f = focusEl.querySelector("#hold > i"); if (f && !stopped) f.style.width = "0"; const sp = focusEl.querySelector("#hold > span"); if (sp) sp.textContent = "Hold to stop"; };
+  const startHold = () => {
+    const fill = focusEl.querySelector("#hold > i"); if (!fill) return;
+    holdStart = performance.now();
+    const tick = (t) => {
+      const p = Math.min(1, (t - holdStart) / 10000);
+      fill.style.width = p * 100 + "%";
+      focusEl.querySelector("#hold > span").textContent = p < 1 ? `Keep holding… ${Math.ceil(10 - p * 10)}` : "Stopped";
+      if (p >= 1) { stopped = true; holdTimer = null; renderFocus(); return; }
+      holdTimer = requestAnimationFrame(tick);
+    };
+    holdTimer = requestAnimationFrame(tick);
+  };
+  focusEl.addEventListener("pointerdown", (e) => { if (e.target.closest("#hold")) { e.preventDefault(); startHold(); } });
+  ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => focusEl.addEventListener(ev, endHold));
+  focusEl.addEventListener("keydown", (e) => { if (e.target.id === "hold" && (e.key === " " || e.key === "Enter") && !holdTimer) { e.preventDefault(); startHold(); } });
+  focusEl.addEventListener("keyup", (e) => { if (e.target.id === "hold") endHold(); });
+  focusEl.addEventListener("click", (e) => { if (e.target.closest("[data-restart-focus]")) { stopped = false; renderFocus(); } });
+
+  // ---------- floating window ----------
+  let bubbleMode = "limit", bubbleOpen = false, bubblePos = null;
+  function renderFloating() {
+    const el = document.getElementById("floating");
+    const m = { limit: { color: "#14B8A6", text: "12 min left today", head: "happy", lines: ["Instagram · 12 of 30 min", "Then 20 min in ReadEra unlocks 30 more"] },
+      focus: { color: "#0F766E", text: "Tolo · 8 min left", head: "happy", lines: ["Focus in ReadEra", "Leaving sends you back. Calls always work."] },
+      paused: { color: "#8B7FA3", text: "8 min left (paused)", head: "sleepy", lines: ["Paused: no page turns for 90 s", "Scroll or turn a page to keep counting"] } }[bubbleMode];
+    el.innerHTML = `<div class="feed">${statusBar(true)}<div class="feed-top"><span>${bubbleMode === "limit" ? "Instagram" : "ReadEra"}</span><span>⋯</span></div>
+      ${bubbleMode === "limit" ? `<div class="post tall"></div><div class="meta"></div><div class="meta short"></div><div class="post"></div><div class="meta"></div>`
+        : `<div style="margin:10px 14px;background:#F5EFE3;border-radius:10px;flex:1;padding:16px;color:#3B3226;font-family:Georgia,serif;font-size:13px;line-height:1.55;font-weight:400">Chapter 4<br><br>The river was slower than she remembered, and the reeds leaned the same way they always had, as if listening for something upstream…<br><br>She sat down on the bank and opened the letter again.</div>`}
+      </div>
+      <div class="float" id="float" style="${bubblePos ? `top:${bubblePos.y}px;left:${bubblePos.x}px;right:auto` : ""}">
+        <div class="pill" id="pill" style="background:${m.color}" role="button" tabindex="0" aria-expanded="${bubbleOpen}"><span class="head">${toloHead(28)}</span><span class="num">${m.text}</span></div>
+        ${bubbleOpen ? `<div class="panel"><strong>${m.lines[0]}</strong><span>${m.lines[1]}</span><button type="button" class="btn small" style="width:100%">Open Mello</button></div>` : ""}
+      </div>`;
+    const fl = el.querySelector("#float"), pill = el.querySelector("#pill");
+    let sx, sy, ox, oy, moved = false;
+    pill.addEventListener("pointerdown", (e) => { sx = e.clientX; sy = e.clientY; const r = fl.getBoundingClientRect(), pr = el.getBoundingClientRect(); ox = r.left - pr.left; oy = r.top - pr.top; moved = false; pill.setPointerCapture(e.pointerId); });
+    pill.addEventListener("pointermove", (e) => {
+      if (sx === undefined) return;
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
+      if (!moved) return;
+      const pr = el.getBoundingClientRect();
+      const x = Math.max(4, Math.min(pr.width - fl.offsetWidth - 4, ox + dx)), y = Math.max(30, Math.min(pr.height - fl.offsetHeight - 4, oy + dy));
+      bubblePos = { x, y }; fl.style.left = x + "px"; fl.style.top = y + "px"; fl.style.right = "auto";
+    });
+    pill.addEventListener("pointerup", () => { sx = undefined; if (!moved) { bubbleOpen = !bubbleOpen; renderFloating(); } });
+    pill.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); bubbleOpen = !bubbleOpen; renderFloating(); el.querySelector("#pill").focus(); } });
+  }
+
+  // ---------- widgets ----------
+  function renderWidgets() {
+    const s = S();
+    const el = document.getElementById("widgets");
+    const apps = ["Phone", "Messages", "Camera", "Photos", "Maps", "ReadEra", "Audible", "Mello"];
+    const pose = !s.guard ? "shell" : state === "night" ? "moon" : s.todayDone ? "proud" : "peek";
+    el.innerHTML = `<div class="homescreen">${statusBar(true).replace('class="status"', 'class="status" style="color:#fff;position:absolute;top:0;left:0;right:0"')}
+      <div class="wgrid">
+        <div class="widget w-2x2" aria-label="Streak widget">
+          <div class="row between"><span class="row" style="gap:2px;font-weight:900;font-size:22px;color:${s.flameOn ? "#FF9600" : "#9C93AD"}">${I.flame(s.flameOn, 24)}<span class="num">${s.streak}</span></span>${I.shield(s.guard, 18)}</div>
+          <div style="display:grid;place-items:center;margin:-6px 0">${tolo(pose, 74)}</div>
+          <div style="font-size:11px;font-weight:900;text-align:center;color:${s.todayDone ? "#0F766E" : !s.guard ? "#C9402F" : "#B07700"}">${!s.guard ? "Guard off" : s.todayDone ? "Today ✓" : "Not yet today"}</div>
+        </div>
+        ${apps.slice(0, 4).map((a) => `<div class="wapp"><i></i>${a}</div>`).join("")}
+        <div class="widget w-4x2" aria-label="Today's goals widget">
+          ${GOALS.slice(0, 2).map((g, i) => `<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><div class="ringmini">${ring(s.goals[i], i ? "#FFC93C" : "#14B8A6", 62, 8)}<b class="num">${s.goals[i] >= 1 ? "✓" : Math.round(s.goals[i] * 100) + "%"}</b></div><span style="font-size:10px;font-weight:900">${g.title.replace(" in ReadEra", "").replace(" Audible", " listen")}</span></div>`).join("")}
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:12px;font-weight:900">${s.todayDone ? "Nice! Keep going?" : "Tolo is waiting"}</span><button type="button" class="btn ${s.guard ? "" : "coral"}">${s.guard ? "Focus now" : "Turn guard on"}</button></div>
+        </div>
+        ${apps.slice(4).map((a) => `<div class="wapp"><i ${a === "Mello" ? 'style="background:#14B8A6;display:grid;place-items:center"' : ""}>${a === "Mello" ? toloHead(36) : ""}</i>${a}</div>`).join("")}
+      </div></div>`;
+  }
+
+  // ---------- pose library + palette ----------
+  const POSES = [["wave", "Hello", "greet"], ["read", "Reading focus", "focus · reading"], ["listen", "Listening focus", "focus · listening"], ["proud", "Streak grew", "streak_up"], ["peek", "Streak at risk", "streak_risk"], ["shell", "Guard off", "guard_off"], ["shrug", "That's okay", "break_glass"], ["moon", "Wind-down", "quiet hours"], ["jump", "Goal done", "focus_done"], ["think", "Thinking", "coach · reflection"], ["point", "Back to your book", "bounce"], ["stop", "Limit reached", "daily limit"]];
+  document.getElementById("poses").innerHTML = POSES.map(([p, n, ev]) => `<div class="pose">${tolo(p, 110)}<b>${n}</b><code>${ev}</code></div>`).join("");
+  document.getElementById("swatches").innerHTML = [["Shell teal", "#14B8A6"], ["Deep teal", "#0F766E"], ["Apricot", "#FFB37A"], ["Cream", "#FFF4E0"], ["Plum ink", "#2B1B3D"], ["Sunflower", "#FFC93C"], ["Coral", "#FF6B5B"]].map(([n, h]) => `<span class="sw"><i style="background:${h}"></i><span>${n}<br><span class="muted num">${h}</span></span></span>`).join("");
+  document.getElementById("brandTolo").innerHTML = tolo("wave", 72);
+
+  // ---------- controls ----------
+  function renderAll() { renderDashboard(); renderWidgets(); }
+  document.querySelector('[aria-label="Simulated day"]').addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-state]"); if (!b) return;
+    state = b.dataset.state;
+    document.querySelectorAll("[data-state]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    renderAll();
+  });
+  document.querySelector('[aria-label="Bubble mode"]').addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-bubble]"); if (!b) return;
+    bubbleMode = b.dataset.bubble; bubbleOpen = false;
+    document.querySelectorAll("[data-bubble]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    renderFloating();
+  });
+  const themeBtn = document.getElementById("themeBtn");
+  const isDark = () => document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  const syncThemeLabel = () => { themeBtn.textContent = isDark() ? "Light" : "Dark"; };
+  themeBtn.addEventListener("click", () => {
+    const next = isDark() ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("mello-theme", next); } catch (_) {}
+    syncThemeLabel();
+  });
+  try { const t = localStorage.getItem("mello-theme"); if (t) document.documentElement.dataset.theme = t; } catch (_) {}
+  syncThemeLabel();
+
+  renderOnboarding(); renderAll(); renderFocus(); renderFloating();
+})();
+</script>
