@@ -41,5 +41,46 @@ object UsageTracker {
     return total
   }
 
+  data class DayUsage(val apps: Map<String, Pair<Long, Int>>, val screenOnMs: Long, val unlocks: Int)
+
+  /**
+   * Per-app foreground ms and open counts, screen-on time and unlocks between [from] and [to].
+   * Only totals leave this function; the raw event stream never leaves the phone.
+   */
+  fun usageBetween(context: Context, from: Long, to: Long): DayUsage {
+    if (!hasAccess(context)) return DayUsage(emptyMap(), 0L, 0)
+    val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+    val events = usm.queryEvents(from, to)
+    val started = HashMap<String, Long>()
+    val total = HashMap<String, Long>()
+    val opens = HashMap<String, Int>()
+    var screenOnSince = -1L
+    var screenOnMs = 0L
+    var unlocks = 0
+    val e = UsageEvents.Event()
+    while (events.hasNextEvent()) {
+      events.getNextEvent(e)
+      when (e.eventType) {
+        UsageEvents.Event.ACTIVITY_RESUMED -> e.packageName?.let { pkg ->
+          if (started.putIfAbsent(pkg, e.timeStamp) == null) opens[pkg] = (opens[pkg] ?: 0) + 1
+        }
+        UsageEvents.Event.ACTIVITY_PAUSED, UsageEvents.Event.ACTIVITY_STOPPED -> e.packageName?.let { pkg ->
+          started.remove(pkg)?.let { total[pkg] = (total[pkg] ?: 0L) + (e.timeStamp - it) }
+        }
+        UsageEvents.Event.SCREEN_INTERACTIVE -> if (screenOnSince < 0) screenOnSince = e.timeStamp
+        UsageEvents.Event.SCREEN_NON_INTERACTIVE -> if (screenOnSince >= 0) {
+          screenOnMs += e.timeStamp - screenOnSince
+          screenOnSince = -1
+        }
+        UsageEvents.Event.KEYGUARD_HIDDEN -> unlocks++
+      }
+    }
+    val end = minOf(to, System.currentTimeMillis())
+    for ((pkg, since) in started) total[pkg] = (total[pkg] ?: 0L) + (end - since)
+    if (screenOnSince >= 0) screenOnMs += end - screenOnSince
+    val apps = (total.keys + opens.keys).associateWith { (total[it] ?: 0L) to (opens[it] ?: 0) }
+    return DayUsage(apps, screenOnMs, unlocks)
+  }
+
   fun minutesToday(context: Context, pkg: String): Int = ((foregroundMsToday(context, setOf(pkg))[pkg] ?: 0L) / 60_000L).toInt()
 }

@@ -4,7 +4,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as Speech from 'expo-speech';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
-import type { KidConfig, Message } from '@mello/shared';
+import { categoryFor, characterLine, characterOf, displayName, type InstalledApp, type KidConfig, type Message } from '@mello/shared';
 import { MelloBlocker } from '../../modules/mello-blocker';
 import { isUnpaired, kidApi } from './api';
 import { readJson, writeJson } from './cache';
@@ -22,7 +22,7 @@ export function cachedConfig(): KidConfig | null {
 export async function syncKid(token: string, opts: { uploadDevice?: boolean } = {}): Promise<KidConfig | null> {
   const api = kidApi(token);
   if (opts.uploadDevice) {
-    const [pushToken, apps] = await Promise.all([registerForPush(), MelloBlocker.getInstalledApps().catch(() => [])]);
+    const [pushToken, apps] = await Promise.all([registerForPush(), installedApps()]);
     await api
       .updateDevice({
         pushToken,
@@ -45,13 +45,23 @@ export async function syncKid(token: string, opts: { uploadDevice?: boolean } = 
   }
 }
 
-/** Hands the family's rules to the native gate, which enforces them even when Mello isn't open. */
+/** Launchable apps with a category (social, reading, …) for goals and insights. */
+export async function installedApps(): Promise<InstalledApp[]> {
+  const apps = await MelloBlocker.getInstalledApps().catch(() => []);
+  return apps.map(({ packageName, label, androidCategory }) => ({ packageName, label, category: categoryFor(packageName, androidCategory) }));
+}
+
+/** Hands the rules to the native gate, which enforces them even when Mello isn't open. */
 function applyRules(config: KidConfig) {
   const blocked = new Set(config.rules.filter((r) => r.enabled).flatMap((r) => r.apps));
   MelloBlocker.setBlockedPackages([...blocked]);
   MelloBlocker.setLimits(Object.fromEntries(config.limits.map((l) => [l.packageName, l.dailyMinutes])));
   MelloBlocker.setQuietHours(config.quietHours);
   MelloBlocker.setBubble(true, suggestions(config));
+  // The bubble and (in self mode) guard-off reminders speak as the chosen character.
+  const prefs = config.kid.settings.character;
+  const name = displayName(prefs);
+  MelloBlocker.setCharacter(name, characterOf(prefs).colors.accent, { guard_off: characterLine(prefs, 'guard_off', { name }) }, config.kid.kind === 'self');
 }
 
 /** Short "what to do next" lines for the floating bubble and the home screen. */
@@ -62,6 +72,10 @@ export function suggestions(config: KidConfig): string[] {
     const p = config.taskProgress.find((x) => x.taskId === t.id);
     if (p?.completed) continue;
     const left = Math.max(1, Math.ceil(t.requiredMinutes - (p?.seconds ?? 0) / 60));
+    if (t.kind === 'app') {
+      lines.push(`${left} min in ${label(t.appPackage ?? '')}: ${t.title}`);
+      continue;
+    }
     const verb = { audio: 'Listen to', video: 'Watch', article: 'Read', reading: 'Read' }[t.kind];
     lines.push(`${verb} "${t.title}" (${left} min left)`);
   }
@@ -78,6 +92,11 @@ export function suggestions(config: KidConfig): string[] {
 /** Turns the gate off and forgets this kid's data. Call only after the backend has signed the phone out. */
 export function clearKidDevice() {
   MelloBlocker.setBlockedPackages([]);
+  MelloBlocker.setLimits({});
+  MelloBlocker.setQuietHours(null);
+  if (MelloBlocker.getFocus()) MelloBlocker.breakGlass();
+  MelloBlocker.consumeFocusResult();
+  MelloBlocker.setCharacter('Mello', '#5B5BD6', {}, false);
   writeJson(CONFIG_CACHE, null);
   writeJson('progress', {});
 }

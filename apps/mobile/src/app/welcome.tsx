@@ -6,8 +6,9 @@ import { supabase } from '@/lib/supabase';
 import { Button, Card, ErrorText, Field, Muted, Screen, Title } from '@/components/ui';
 
 export default function Welcome() {
-  const { session, signInKid } = useSession();
+  const { session, signInKid, setIntent } = useSession();
   const [mode, setMode] = useState<'choose' | 'parent' | 'kid'>('choose');
+  const [forSelf, setForSelf] = useState(false);
   const [isNewAccount, setIsNewAccount] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,6 +36,8 @@ export default function Welcome() {
 
   const parentAuth = () =>
     run(async () => {
+      // "Just me" uses the same account; after sign-in the app continues to the self setup.
+      await setIntent(forSelf ? 'self' : null);
       const creds = { email: email.trim(), password };
       if (isNewAccount) {
         const { data, error: err } = await supabase.auth.signUp(creds);
@@ -50,8 +53,12 @@ export default function Welcome() {
   if (mode === 'parent')
     return (
       <Screen>
-        <Title>{isNewAccount ? 'Create a parent account' : 'Parent sign in'}</Title>
-        <Muted>Your account works on any phone, and you can add a second parent later.</Muted>
+        <Title>{isNewAccount ? (forSelf ? 'Create your account' : 'Create a parent account') : forSelf ? 'Sign in' : 'Parent sign in'}</Title>
+        <Muted>
+          {forSelf
+            ? 'Your account keeps your goals and companion if you change phones. Nobody else can see your activity.'
+            : 'Your account works on any phone, and you can add a second parent later.'}
+        </Muted>
         <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
         <Field label="Password (8+ characters)" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoComplete="password" />
         <ErrorText error={error} />
@@ -103,11 +110,28 @@ export default function Welcome() {
       <Title>Who uses this phone?</Title>
       <Card>
         <Muted>Parents set reading rules, tasks, time limits and bedtime, and send voice messages.</Muted>
-        <Button title="I'm the parent" onPress={() => setMode('parent')} />
+        <Button
+          title="I'm the parent"
+          onPress={() => {
+            setForSelf(false);
+            setMode('parent');
+          }}
+        />
       </Card>
       <Card>
         <Muted>Kids read, listen or watch a little before opening the apps their parent picked.</Muted>
         <Button title="This is my kid's phone" variant="secondary" onPress={() => setMode('kid')} />
+      </Card>
+      <Card>
+        <Muted>Just me: a companion that helps you scroll less and read or listen more, on your own phone. Private to you.</Muted>
+        <Button
+          title="Coach my own phone"
+          variant="secondary"
+          onPress={() => {
+            setForSelf(true);
+            setMode('parent');
+          }}
+        />
       </Card>
     </Screen>
   );

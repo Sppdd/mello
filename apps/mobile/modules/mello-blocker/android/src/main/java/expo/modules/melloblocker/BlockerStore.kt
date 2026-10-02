@@ -19,6 +19,16 @@ object BlockerStore {
   private const val KEY_QUIET = "quiet_hours"
   private const val KEY_BUBBLE_ENABLED = "bubble_enabled"
   private const val KEY_BUBBLE_LINES = "bubble_lines"
+  private const val KEY_FOCUS = "focus"
+  private const val KEY_FOCUS_RESULT = "focus_result"
+  private const val KEY_CHARACTER = "character"
+  private const val KEY_HEARTBEAT = "heartbeat"
+  private const val KEY_GUARD_DAY = "guard_day"
+  private const val KEY_GUARD_MS = "guard_ms"
+  private const val KEY_BREAK_GLASS_DAY = "break_glass_day"
+  private const val KEY_BREAK_GLASS_COUNT = "break_glass_count"
+  private const val KEY_NUDGE_DAY = "nudge_day"
+  private const val KEY_NUDGE_COUNT = "nudge_count"
 
   // Mirrors NEVER_BLOCK in packages/shared: the phone must always be able to call for help.
   val NEVER_BLOCK = setOf(
@@ -102,6 +112,125 @@ object BlockerStore {
   fun bubbleEnabled(context: Context) = prefs(context).getBoolean(KEY_BUBBLE_ENABLED, true)
 
   fun bubbleLines(context: Context): List<String> = stringSet(prefs(context).getString(KEY_BUBBLE_LINES, "[]")).toList()
+
+  // ----- focus sessions: stay in one app (e.g. ReadEra) for N minutes -----
+  data class Focus(
+    val target: String,
+    val label: String,
+    val requiredMs: Long,
+    val elapsedMs: Long,
+    /** Last time time was counted (or the user was elsewhere); the next count starts here. */
+    val countedAt: Long,
+    val startedAt: Long,
+    val gatedApp: String?,
+  ) {
+    fun toJson(): String = JSONObject()
+      .put("target", target).put("label", label).put("requiredMs", requiredMs).put("elapsedMs", elapsedMs)
+      .put("countedAt", countedAt).put("startedAt", startedAt).put("gatedApp", gatedApp ?: JSONObject.NULL)
+      .toString()
+
+    fun toMap(): Map<String, Any?> = mapOf(
+      "target" to target, "label" to label, "requiredMs" to requiredMs.toDouble(), "elapsedMs" to elapsedMs.toDouble(),
+      "startedAt" to startedAt.toDouble(), "gatedApp" to gatedApp,
+    )
+  }
+
+  fun startFocus(context: Context, target: String, label: String, minutes: Int, gatedApp: String?) {
+    if (target in NEVER_BLOCK) return
+    val now = System.currentTimeMillis()
+    saveFocus(context, Focus(target, label, minutes * 60_000L, 0L, now, now, gatedApp))
+  }
+
+  fun saveFocus(context: Context, f: Focus) {
+    prefs(context).edit().putString(KEY_FOCUS, f.toJson()).apply()
+  }
+
+  fun focus(context: Context): Focus? {
+    val raw = prefs(context).getString(KEY_FOCUS, null) ?: return null
+    return runCatching {
+      val o = JSONObject(raw)
+      Focus(
+        o.getString("target"), o.optString("label", o.getString("target")), o.getLong("requiredMs"), o.getLong("elapsedMs"),
+        o.getLong("countedAt"), o.getLong("startedAt"), if (o.isNull("gatedApp")) null else o.getString("gatedApp"),
+      )
+    }.getOrNull()
+  }
+
+  /** Ends the session and leaves a result for the app to pick up once. */
+  fun endFocus(context: Context, completed: Boolean, reason: String? = null) {
+    val f = focus(context) ?: return
+    val result = JSONObject(f.toJson()).put("completed", completed).put("endedAt", System.currentTimeMillis()).put("reason", reason ?: JSONObject.NULL)
+    val edit = prefs(context).edit().remove(KEY_FOCUS).putString(KEY_FOCUS_RESULT, result.toString())
+    if (!completed) {
+      val day = today()
+      val p = prefs(context)
+      val count = if (p.getString(KEY_BREAK_GLASS_DAY, null) == day) p.getInt(KEY_BREAK_GLASS_COUNT, 0) else 0
+      edit.putString(KEY_BREAK_GLASS_DAY, day).putInt(KEY_BREAK_GLASS_COUNT, count + 1)
+    }
+    edit.apply()
+  }
+
+  fun consumeFocusResult(context: Context): Map<String, Any?>? {
+    val raw = prefs(context).getString(KEY_FOCUS_RESULT, null) ?: return null
+    prefs(context).edit().remove(KEY_FOCUS_RESULT).apply()
+    val o = JSONObject(raw)
+    return mapOf(
+      "target" to o.getString("target"),
+      "label" to o.optString("label"),
+      "elapsedMs" to o.getLong("elapsedMs").toDouble(),
+      "requiredMs" to o.getLong("requiredMs").toDouble(),
+      "completed" to o.getBoolean("completed"),
+      "gatedApp" to if (o.isNull("gatedApp")) null else o.getString("gatedApp"),
+      "reason" to if (o.isNull("reason")) null else o.getString("reason"),
+    )
+  }
+
+  fun breakGlassToday(context: Context): Int =
+    prefs(context).let { if (it.getString(KEY_BREAK_GLASS_DAY, null) == today()) it.getInt(KEY_BREAK_GLASS_COUNT, 0) else 0 }
+
+  // ----- the character speaking in the bubble and notifications (sent from JS) -----
+  data class Character(val name: String, val color: String, val lines: Map<String, String>, val guardWatch: Boolean)
+
+  fun setCharacter(context: Context, c: Character) {
+    val o = JSONObject().put("name", c.name).put("color", c.color).put("lines", JSONObject(c.lines as Map<*, *>)).put("guardWatch", c.guardWatch)
+    prefs(context).edit().putString(KEY_CHARACTER, o.toString()).apply()
+  }
+
+  fun character(context: Context): Character? {
+    val raw = prefs(context).getString(KEY_CHARACTER, null) ?: return null
+    return runCatching {
+      val o = JSONObject(raw)
+      val lines = o.getJSONObject("lines")
+      Character(o.getString("name"), o.getString("color"), lines.keys().asSequence().associateWith { lines.getString(it) }, o.optBoolean("guardWatch"))
+    }.getOrNull()
+  }
+
+  // ----- guard heartbeat: how long the service was running today -----
+  /** Called on every service tick. Gaps longer than [maxGapMs] (service off, phone asleep) aren't counted. */
+  fun heartbeat(context: Context, now: Long, maxGapMs: Long) {
+    val p = prefs(context)
+    val day = today()
+    val last = p.getLong(KEY_HEARTBEAT, 0L)
+    var ms = if (p.getString(KEY_GUARD_DAY, null) == day) p.getLong(KEY_GUARD_MS, 0L) else 0L
+    val gap = now - last
+    if (last > 0 && gap in 1..maxGapMs && last >= UsageTracker.startOfToday()) ms += gap
+    p.edit().putLong(KEY_HEARTBEAT, now).putString(KEY_GUARD_DAY, day).putLong(KEY_GUARD_MS, ms).apply()
+  }
+
+  fun guardMsToday(context: Context): Long =
+    prefs(context).let { if (it.getString(KEY_GUARD_DAY, null) == today()) it.getLong(KEY_GUARD_MS, 0L) else 0L }
+
+  /** Counts guard-off notifications so we nudge at most a few times a day. Returns false once the cap is hit. */
+  fun takeNudge(context: Context, maxPerDay: Int): Boolean {
+    val p = prefs(context)
+    val day = today()
+    val count = if (p.getString(KEY_NUDGE_DAY, null) == day) p.getInt(KEY_NUDGE_COUNT, 0) else 0
+    if (count >= maxPerDay) return false
+    p.edit().putString(KEY_NUDGE_DAY, day).putInt(KEY_NUDGE_COUNT, count + 1).apply()
+    return true
+  }
+
+  private fun today(): String = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
 
   private fun stringSet(json: String?): Set<String> {
     val arr = JSONArray(json ?: "[]")

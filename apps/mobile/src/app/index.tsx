@@ -3,7 +3,7 @@ import { Redirect } from 'expo-router';
 import { useSession } from '@/lib/session';
 
 export default function Index() {
-  const { session, loading } = useSession();
+  const { session, loading, intent } = useSession();
   if (loading)
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -11,5 +11,6 @@ export default function Index() {
       </View>
     );
   if (!session) return <Redirect href="/welcome" />;
-  return <Redirect href={session.role === 'parent' ? '/parent' : '/kid'} />;
+  if (session.role === 'parent') return <Redirect href={intent === 'self' ? '/setup-self' : '/parent'} />;
+  return <Redirect href={session.role === 'self' ? '/self' : '/kid'} />;
 }

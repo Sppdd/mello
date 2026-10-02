@@ -15,8 +15,8 @@ import android.widget.TextView
 import kotlin.math.abs
 
 /**
- * A small, always-visible bubble the kid sees on top of apps that have a limit or a timed unlock:
- * "TikTok · 12 min left today". Tapping it expands Mello's suggestions (sent from JS) and an
+ * A small, always-visible bubble on top of apps that have a limit or a timed unlock
+ * ("TikTok · 12 min left today"), or during a focus session ("Pip · 12 min left"). Tapping it expands Mello's suggestions (sent from JS) and an
  * "Open Mello" button. It's drawn by the accessibility service (TYPE_ACCESSIBILITY_OVERLAY), so it
  * needs no extra permission, and it can be dragged out of the way.
  */
@@ -25,6 +25,7 @@ class TimeBubble(private val service: AccessibilityService) {
   private var root: LinearLayout? = null
   private lateinit var headline: TextView
   private lateinit var details: LinearLayout
+  private val pillBackground = GradientDrawable()
   private var expanded = false
   private val params = WindowManager.LayoutParams(
     WindowManager.LayoutParams.WRAP_CONTENT,
@@ -40,6 +41,9 @@ class TimeBubble(private val service: AccessibilityService) {
 
   fun show(text: String, suggestions: List<String>) {
     if (root == null) create()
+    // The user's character colours the pill; Mello purple until JS has sent one.
+    val color = BlockerStore.character(service)?.color?.let { runCatching { Color.parseColor(it) }.getOrNull() } ?: Color.parseColor("#5B5BD6")
+    pillBackground.setColor(Color.argb(0xE6, Color.red(color), Color.green(color), Color.blue(color)))
     headline.text = text
     details.removeAllViews()
     for (s in suggestions.take(4)) details.addView(label("• $s", 13f, Color.parseColor("#1F2430")))
@@ -72,7 +76,7 @@ class TimeBubble(private val service: AccessibilityService) {
     }
     val pill = LinearLayout(service).apply {
       setPadding(dp(14), dp(8), dp(14), dp(8))
-      background = GradientDrawable().apply { setColor(Color.parseColor("#E65B5BD6")); cornerRadius = dp(20).toFloat() }
+      background = pillBackground.apply { cornerRadius = dp(20).toFloat() }
       addView(headline)
     }
     root = LinearLayout(service).apply {

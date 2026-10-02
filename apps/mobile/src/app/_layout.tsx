@@ -37,6 +37,8 @@ function RootStack() {
       <Stack.Screen name="welcome" options={{ title: 'Welcome to Mello', headerBackVisible: false }} />
       <Stack.Screen name="parent" options={{ headerShown: false }} />
       <Stack.Screen name="kid" options={{ headerShown: false }} />
+      <Stack.Screen name="self" options={{ headerShown: false }} />
+      <Stack.Screen name="setup-self" options={{ title: 'Just me', headerBackVisible: false }} />
     </Stack>
   );
 }

@@ -5,6 +5,11 @@ import type {
   BookInput,
   BookWithText,
   ChallengeResult,
+  ClientAction,
+  SelfProfile,
+  SelfProfileInput,
+  Streak,
+  UsageDay,
   DeviceStatus,
   InstalledApp,
   Kid,
@@ -134,7 +139,7 @@ export const kidApi = (token: string) => ({
   taskProgress: (taskId: string, seconds: number) =>
     request<TaskProgress>('POST', `/kid/tasks/${taskId}/progress`, token, { day: localDay(), seconds }),
   location: (lat: number, lng: number, accuracyM: number | null) => request<{ ok: true }>('POST', '/kid/location', token, { lat, lng, accuracyM }),
-  alert: (kind: 'bedtime_attempt' | 'limit_reached' | 'protection_off' | 'gate_bypass_attempt', detail: Record<string, unknown> = {}) =>
+  alert: (kind: 'bedtime_attempt' | 'limit_reached' | 'protection_off' | 'gate_bypass_attempt' | 'break_glass', detail: Record<string, unknown> = {}) =>
     request<{ ok: true }>('POST', '/kid/alerts', token, { kind, detail }),
   book: (bookId: string) => request<BookWithText>('GET', `/kid/books/${bookId}`, token),
   challenge: (bookId: string | null, passage: string) => request<PublicChallenge>('POST', '/kid/challenges', token, { bookId, passage }),
@@ -148,6 +153,26 @@ export const kidApi = (token: string) => ({
   requestUnpair: () => request<{ id: string; status: 'pending' }>('POST', '/kid/unpair-requests', token),
   unpairStatus: (id: string) => request<{ status: 'pending' | 'approved' | 'denied' }>('GET', `/kid/unpair-requests/${id}`, token),
 });
+
+/**
+ * Self mode: the signed-in user coaching their own phone. Profile, usage and the coach use the
+ * Supabase token; goals and limits go through the same /parent routes as a kid's, on the user's own subject.
+ */
+export const selfApi = () => {
+  const t = parentAccessToken;
+  return {
+    setup: (name: string) => request<{ subjectId: string; deviceToken: string; profile: SelfProfile }>('POST', '/self/setup', t, { name }),
+    profile: () => request<SelfProfile>('GET', '/self/profile', t),
+    updateProfile: (patch: SelfProfileInput) => request<SelfProfile>('PUT', '/self/profile', t, patch),
+    putUsage: (day: UsageDay) => request<void>('PUT', '/self/usage', t, day),
+    usage: (days = 7) => request<{ days: UsageDay[]; streak: Streak }>('GET', `/self/usage?days=${days}&today=${localDay()}`, t),
+    reflect: (s: { appLabel: string; title: string | null; minutes: number }) => request<{ questions: string[] }>('POST', '/self/reflect', t, s),
+    saveReflection: (r: { title: string | null; questions: string[]; answers: string[] }) => request<{ reply: string | null }>('POST', '/self/reflections', t, r),
+    coach: (messages: AgentTurn[]) => request<{ reply: string; actions: AgentAction[]; clientActions: ClientAction[] }>('POST', '/self/coach/chat', t, { messages }),
+    deleteData: () => request<void>('DELETE', '/self/data', t),
+    signOut: () => request<void>('POST', '/self/signout', t),
+  };
+};
 
 /** The backend revoked this kid phone (a parent approved sign-out or the password was entered). */
 export const isUnpaired = (err: unknown) => err instanceof ApiError && err.code === 'device_unpaired';
