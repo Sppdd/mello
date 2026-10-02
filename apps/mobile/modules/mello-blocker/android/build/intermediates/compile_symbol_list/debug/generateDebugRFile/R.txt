@@ -1,3 +1,0 @@
-int string mello_accessibility_description 0x0
-int string mello_accessibility_label 0x0
-int xml mello_accessibility_service 0x0
