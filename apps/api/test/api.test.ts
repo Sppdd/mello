@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import {
-  CHARACTER_LIST,
+  SKIN_LIST,
+  KidSettings,
   categoryFor,
   characterLine,
   computeStreak,
@@ -354,27 +355,29 @@ describe('agent tools', () => {
 
 // ---------- self mode ----------
 
-describe('characters', () => {
-  it('fills lines and keeps every persona in character', () => {
-    expect(characterLine({ characterId: 'pip' }, 'bounce', { app: 'ReadEra' }, 1)).toBe('Sneaky! Back to ReadEra.');
-    for (const c of CHARACTER_LIST) {
-      const prompt = personaPrompt({ characterId: c.id, tone: 'firm' }, 'Ali');
-      expect(prompt).toContain(c.name);
+describe('Mello', () => {
+  it('fills lines, and every skin keeps one persona', () => {
+    expect(characterLine({}, 'bounce', { app: 'ReadEra' }, 1)).toBe('Back to ReadEra. Small steps.');
+    for (const s of SKIN_LIST) {
+      const prompt = personaPrompt({ skin: s.id, tone: 'firm' }, 'Ali');
+      expect(prompt).toMatch(/^You are Mello, a giant tortoise/);
       expect(prompt).toMatch(/never insult or shame/);
       expect(prompt).toMatch(/Never mention being an AI/);
     }
-    expect(personaPrompt({ characterId: 'sage', nickname: 'Hoot' }, 'Ali')).toMatch(/^You are Hoot, a owl/);
+    expect(personaPrompt({ nickname: 'Shelly' }, 'Ali')).toMatch(/^You are Shelly, a giant tortoise/);
+  });
+  it('turns characters saved by older builds into Mello', () => {
+    expect(KidSettings.parse({ character: { characterId: 'pip', tone: 'firm' }, allowedCharacters: ['pip'] }).character).toEqual({
+      characterId: 'mello', skin: 'classic', nickname: null, tone: 'firm', voiceOn: true,
+    });
   });
 });
 
-describe('kid buddies', () => {
-  it('lets a kid pick a kid-friendly buddy the parent allows', async () => {
-    const { call, parentToken, kid } = await setup();
-    expect((await call('PUT', '/kid/me/character', kid.deviceToken, { characterId: 'pip' })).body.settings.character).toMatchObject({ characterId: 'pip', tone: 'balanced' });
-    expect((await call('PUT', '/kid/me/character', kid.deviceToken, { characterId: 'bruno' })).body.code).toBe('character_not_allowed');
-    await call('PATCH', `/parent/kids/${kid.kidId}/settings`, parentToken, { allowedCharacters: ['mello', 'luna'] });
-    expect((await call('PUT', '/kid/me/character', kid.deviceToken, { characterId: 'pip' })).status).toBe(403);
-    expect((await call('PUT', '/kid/me/character', kid.deviceToken, { characterId: 'luna' })).status).toBe(200);
+describe('kid buddy', () => {
+  it('lets a kid pick a skin; kids always get the gentle tone', async () => {
+    const { call, kid } = await setup();
+    const res = await call('PUT', '/kid/me/character', kid.deviceToken, { skin: 'berry', tone: 'firm', nickname: 'Shelly' });
+    expect(res.body.settings.character).toMatchObject({ characterId: 'mello', skin: 'berry', tone: 'gentle', nickname: 'Shelly' });
   });
 });
 
@@ -459,8 +462,8 @@ describe('self mode API', () => {
     expect((await call('GET', '/kid/me/config', first.body.deviceToken)).status).toBe(401);
     expect((await call('GET', '/kid/me/config', second.body.deviceToken)).status).toBe(200);
 
-    const updated = await call('PUT', '/self/profile', parentToken, { interests: ['stoicism'], character: { characterId: 'pip', tone: 'firm' } });
-    expect(updated.body).toMatchObject({ interests: ['stoicism'], character: { characterId: 'pip', tone: 'firm', voiceOn: true } });
+    const updated = await call('PUT', '/self/profile', parentToken, { interests: ['stoicism'], character: { skin: 'night', tone: 'firm' } });
+    expect(updated.body).toMatchObject({ interests: ['stoicism'], character: { characterId: 'mello', skin: 'night', tone: 'firm', voiceOn: true } });
 
     expect((await call('POST', '/self/signout', parentToken)).status).toBe(204);
     expect((await call('GET', '/kid/me/config', second.body.deviceToken)).status).toBe(401);

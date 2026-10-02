@@ -1,6 +1,6 @@
 import { Pressable, Switch, Text, View } from 'react-native';
-import { CHARACTER_LIST, type CharacterId, type CharacterPrefs, type Tone } from '@mello/shared';
-import { CharacterArt } from './Character';
+import { SKIN_LIST, type CharacterPrefs, type Tone } from '@mello/shared';
+import { LiveMello } from './Character';
 import { Chip, colors, Field, Label, Muted } from './ui';
 
 const TONES: { tone: Tone; label: string }[] = [
@@ -9,57 +9,39 @@ const TONES: { tone: Tone; label: string }[] = [
   { tone: 'firm', label: 'Firm' },
 ];
 
-/** Pick a character and make it yours: nickname, tone, voice. `allowed` limits the choice (kids). */
-export function CharacterPicker({
-  value,
-  onChange,
-  allowed,
-  showTone = true,
-}: {
-  value: CharacterPrefs;
-  onChange: (v: CharacterPrefs) => void;
-  allowed?: CharacterId[];
-  showTone?: boolean;
-}) {
-  const list = CHARACTER_LIST.filter((c) => !allowed?.length || allowed.includes(c.id));
+/** Make Mello yours: a colour skin, a nickname, how it talks, and its voice. */
+export function CharacterPicker({ value, onChange, showTone = true }: { value: CharacterPrefs; onChange: (v: CharacterPrefs) => void; showTone?: boolean }) {
   return (
     <View style={{ gap: 12 }}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        {list.map((c) => {
-          const selected = value.characterId === c.id;
+      <View style={{ alignItems: 'center' }}>
+        <LiveMello prefs={value} mood="happy" size={150} />
+      </View>
+      <Label>Colour</Label>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {SKIN_LIST.map((s) => {
+          const selected = value.skin === s.id;
           return (
             <Pressable
-              key={c.id}
+              key={s.id}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              onPress={() => onChange({ ...value, characterId: c.id, nickname: null })}
-              style={{
-                width: '47%',
-                padding: 10,
-                borderRadius: 14,
-                borderWidth: 2,
-                borderColor: selected ? c.colors.accent : colors.border,
-                backgroundColor: colors.card,
-                alignItems: 'center',
-                gap: 4,
-              }}
+              accessibilityLabel={`${s.name} skin`}
+              onPress={() => onChange({ ...value, skin: s.id })}
+              style={{ alignItems: 'center', gap: 4, padding: 6, borderRadius: 14, borderWidth: 2, borderColor: selected ? s.colors.accent : colors.border, backgroundColor: colors.card }}
             >
-              <CharacterArt prefs={{ characterId: c.id }} mood={selected ? 'proud' : 'happy'} size={72} />
-              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>{c.name}</Text>
-              <Text style={{ fontSize: 12, color: colors.muted, textAlign: 'center' }}>{c.tagline}</Text>
+              <View style={{ flexDirection: 'row' }}>
+                <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: s.colors.shell }} />
+                <View style={{ width: 22, height: 22, borderRadius: 11, marginLeft: -6, backgroundColor: s.colors.skin, borderWidth: 2, borderColor: colors.card }} />
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.ink }}>{s.name}</Text>
             </Pressable>
           );
         })}
       </View>
-      <Field
-        label="Give them a name (optional)"
-        value={value.nickname ?? ''}
-        onChangeText={(t) => onChange({ ...value, nickname: t.trim() ? t.slice(0, 24) : null })}
-        placeholder={CHARACTER_LIST.find((c) => c.id === value.characterId)?.name}
-      />
+      <Field label="Give Mello a nickname (optional)" value={value.nickname ?? ''} onChangeText={(t) => onChange({ ...value, nickname: t.trim() ? t.slice(0, 24) : null })} placeholder="Mello" />
       {showTone && (
         <>
-          <Label>How should they talk to you?</Label>
+          <Label>How should Mello talk to you?</Label>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {TONES.map((t) => (
               <Chip key={t.tone} label={t.label} selected={value.tone === t.tone} onPress={() => onChange({ ...value, tone: t.tone })} />
@@ -68,7 +50,7 @@ export function CharacterPicker({
         </>
       )}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Muted>Read messages out loud</Muted>
+        <Muted>Talk out loud</Muted>
         <Switch value={value.voiceOn} onValueChange={(voiceOn) => onChange({ ...value, voiceOn })} />
       </View>
     </View>

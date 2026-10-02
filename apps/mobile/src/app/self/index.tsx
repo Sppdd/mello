@@ -208,7 +208,7 @@ export default function SelfHome() {
       <Button title={`Talk to ${displayName(prefs)}`} onPress={() => router.push('/self/coach')} />
       <Button title="Your habits" variant="secondary" onPress={() => router.push('/self/insights')} />
       <Button title="Goals & interests" variant="secondary" onPress={() => router.push('/self/goals')} />
-      <Button title="Your companion" variant="secondary" onPress={() => router.push('/self/character')} />
+      <Button title="Your Mello" variant="secondary" onPress={() => router.push('/self/character')} />
       <Button title="Sign out" variant="secondary" onPress={() => router.push('/self/signout')} />
     </Screen>
   );

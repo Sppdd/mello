@@ -12,7 +12,7 @@ export default function KidLayout() {
       <Stack.Screen name="index" options={{ title: 'Mello' }} />
       <Stack.Screen name="read" options={{ title: 'Reading', gestureEnabled: false }} />
       <Stack.Screen name="signout" options={{ title: 'Sign out' }} />
-      <Stack.Screen name="buddy" options={{ title: 'Your buddy' }} />
+      <Stack.Screen name="buddy" options={{ title: 'Your Mello' }} />
     </Stack>
   );
 }

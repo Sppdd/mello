@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Redirect, router } from 'expo-router';
-import * as Speech from 'expo-speech';
-import { characterLine, characterOf } from '@mello/shared';
+import { characterLine } from '@mello/shared';
 import type { FocusResult } from '../../../modules/mello-blocker';
 import { MelloBlocker } from '../../../modules/mello-blocker';
 import { selfApi } from '@/lib/api';
@@ -9,6 +8,7 @@ import { readJson, writeJson } from '@/lib/cache';
 import { cachedConfig } from '@/lib/kid';
 import { recordFocus } from '@/lib/self';
 import { useSelfSession } from '@/lib/session';
+import { speakAs } from '@/lib/voice';
 import { CharacterSays } from '@/components/Character';
 import { Button, Card, Field, Label, Muted, Screen } from '@/components/ui';
 
@@ -34,10 +34,7 @@ export default function Reflect() {
     if (!result) return;
     recordFocus(session.token, config, result).catch((e) => console.warn('[focus] record failed', e));
     writeJson('last-focus-result', null);
-    if (result.completed && prefs?.voiceOn !== false) {
-      const v = characterOf(prefs).voice;
-      Speech.speak(characterLine(prefs, 'focus_done', { minutes }), { pitch: v.pitch, rate: v.rate });
-    }
+    if (result.completed && prefs?.voiceOn !== false) speakAs(prefs, characterLine(prefs, 'focus_done', { minutes }));
   }, [result, session.token, config, prefs, minutes]);
 
   const done = () => {

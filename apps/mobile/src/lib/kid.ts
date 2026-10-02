@@ -2,12 +2,12 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import * as Speech from 'expo-speech';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { categoryFor, characterLine, characterOf, displayName, type InstalledApp, type KidConfig, type Message } from '@mello/shared';
 import { MelloBlocker } from '../../modules/mello-blocker';
 import { isUnpaired, kidApi } from './api';
 import { readJson, writeJson } from './cache';
+import { speakAs } from './voice';
 
 const CONFIG_CACHE = 'kid-config';
 
@@ -135,7 +135,7 @@ export async function playPendingMessages(token: string, onPlay?: (m: Message) =
     for (const m of messages) {
       onPlay?.(m);
       if (m.kind === 'audio' && m.audioUrl) await playUrl(m.audioUrl);
-      else if (m.text) await speak(m.text, characterOf(cachedConfig()?.kid.settings.character).voice);
+      else if (m.text) await speakAs(cachedConfig()?.kid.settings.character, m.text);
       await api.markPlayed(m.id);
     }
   } catch (err) {
@@ -143,13 +143,6 @@ export async function playPendingMessages(token: string, onPlay?: (m: Message) =
   } finally {
     playing = false;
   }
-}
-
-/** Typed messages are read in the buddy's voice; parent recordings play as recorded. */
-function speak(text: string, voice: { pitch: number; rate: number }) {
-  return new Promise<void>((resolve) => {
-    Speech.speak(text, { pitch: voice.pitch, rate: voice.rate, onDone: resolve, onStopped: resolve, onError: () => resolve() });
-  });
 }
 
 function playUrl(url: string) {

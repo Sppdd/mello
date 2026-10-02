@@ -1,19 +1,12 @@
-# Self mode ("Just me") and the character cast
+# Self mode ("Just me") and Mello
 
 Mello started as parent → kid. Self mode is the same engine pointed at your own phone: no one else watches, and a companion character helps you scroll less and read or listen more.
 
 ## What it does
-- **Companion characters.** Pick one of five and make it yours (nickname, tone, voice). The same cast is the kids' reading buddy.
-  | | Species | Personality | Kids |
-  |---|---|---|---|
-  | Mello | marshmallow | gentle, warm (default) | ✓ |
-  | Pip | sparrow | upbeat hype | ✓ |
-  | Sage | owl | calm, asks good questions | ✓ |
-  | Bruno | bear | tough-love coach | adults/teens |
-  | Luna | cat | quiet wind-down, listening | ✓ |
-  - Cast, lines and persona prompts: `packages/shared/src/characters.ts`.
-  - Drawings: `apps/mobile/src/components/Character.tsx` (SVG, five moods).
-  - The app never shows "agent" internals: no tool logs, and changes are told in the character's voice.
+- **Mello, the companion.** One character for everyone: Mello, a calm giant tortoise ("Small steps, big journeys"). People make it theirs with a colour skin (Classic, Lagoon, Berry, Sunny, Night), a nickname, a tone (gentle / balanced / firm; kids always get gentle) and voice on/off. Kids get the same Mello.
+  - Persona, skins and lines: `packages/shared/src/characters.ts`. Settings saved by older builds (Pip, Sage, …) load as Mello.
+  - Mello is alive on screen (`LiveMello` in `apps/mobile/src/components/Character.tsx`): it breathes, sways, blinks, moves its mouth while it speaks and bounces when tapped. It uses rendered art when added (`src/assets/mello.ts`, spec in `docs/brand/mello-live.md`) and a drawing until then.
+  - The app never shows "agent" internals: no tool logs, and changes are told in Mello's voice.
 - **Focus sessions in other apps.** "20 minutes in ReadEra", optionally required before Instagram opens.
   - While a session runs, leaving the app sends you back. Mello, the phone/emergency apps and Settings always stay reachable.
   - Time only counts while you're active in the app (a scroll, tap or page turn within 90 s).

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CharacterId, CharacterPrefs } from './characters.ts';
+import { CharacterPrefs } from './characters.ts';
 
 export * from './characters.ts';
 
@@ -50,10 +50,8 @@ export const KidSettings = z.object({
   photoProof: z.boolean().default(false),
   /** Only count reading/listening time while the phone is held and the screen is on. */
   attentionChecks: z.boolean().default(true),
-  /** The kid's (or self user's) buddy and how it talks. */
+  /** Mello's skin, tone and nickname for this kid (or self user). */
   character: CharacterPrefs.default(CharacterPrefs.parse({})),
-  /** Characters a kid may pick; empty means any kid-friendly one. */
-  allowedCharacters: z.array(CharacterId).default([]),
 });
 export type KidSettings = z.infer<typeof KidSettings>;
 

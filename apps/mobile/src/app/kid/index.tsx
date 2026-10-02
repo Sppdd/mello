@@ -163,7 +163,7 @@ export default function KidHome() {
         </Muted>
       )}
 
-      <Button title="Change my buddy" variant="secondary" onPress={() => router.push('/kid/buddy')} />
+      <Button title="Change Mello's colour" variant="secondary" onPress={() => router.push('/kid/buddy')} />
       <Button title="Sign out of Mello" variant="secondary" onPress={() => router.push('/kid/signout')} />
     </Screen>
   );

@@ -1,3 +1,5 @@
+> **Update:** the tortoise is now called **Mello** and follows the new character sheet (see [mello-mascot-prompts.md](mello-mascot-prompts.md) and [mello-live.md](mello-live.md)). The pose list and formats below still apply; read "Tolo" as "Mello".
+
 # Tolo in 3D: asset list, prompts and formats
 
 Generate these in Weavy (see [weavy-tortoise-pipeline.md](weavy-tortoise-pipeline.md) for the node graph):

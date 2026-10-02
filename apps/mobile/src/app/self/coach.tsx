@@ -1,13 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Speech from 'expo-speech';
 import { characterOf, displayName, type ClientAction } from '@mello/shared';
 import { selfApi, type AgentTurn } from '@/lib/api';
 import { cachedConfig, syncKid } from '@/lib/kid';
 import { readJson, writeJson } from '@/lib/cache';
 import { startFocus } from '@/lib/self';
 import { useSelfSession } from '@/lib/session';
+import { speakAs } from '@/lib/voice';
 import { CharacterArt } from '@/components/Character';
 import { Button, colors, ErrorText, Muted } from '@/components/ui';
 
@@ -52,10 +52,7 @@ export default function Coach() {
       if (res.clientActions.some((a) => a.type === 'refresh')) await syncKid(session.token).catch(() => {});
       const offers = res.clientActions.filter((a): a is Extract<ClientAction, { type: 'start_focus' }> => a.type === 'start_focus');
       save([...next, { role: 'assistant', content: res.reply, offers }]);
-      if (prefs?.voiceOn) {
-        const v = characterOf(prefs).voice;
-        Speech.speak(res.reply, { pitch: v.pitch, rate: v.rate });
-      }
+      if (prefs?.voiceOn) speakAs(prefs, res.reply);
     } catch (e) {
       setError(e);
     } finally {
@@ -74,7 +71,7 @@ export default function Coach() {
           onContentSizeChange={() => list.current?.scrollToEnd()}
           ListHeaderComponent={
             <View style={{ alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <CharacterArt prefs={prefs} mood={busy ? 'sleepy' : 'happy'} size={96} />
+              <CharacterArt prefs={prefs} mood={busy ? 'curious' : 'happy'} size={120} />
               {items.length === 0 && (
                 <View style={{ gap: 8, alignSelf: 'stretch' }}>
                   <Muted>Ask {displayName(prefs)} anything about your habits. For example:</Muted>

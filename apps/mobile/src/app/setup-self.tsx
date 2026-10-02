@@ -3,7 +3,6 @@ import { Redirect } from 'expo-router';
 import { CharacterPrefs } from '@mello/shared';
 import { selfApi } from '@/lib/api';
 import { useSession } from '@/lib/session';
-import { CharacterPicker } from '@/components/CharacterPicker';
 import { CharacterSays } from '@/components/Character';
 import { Button, Card, ErrorText, Field, Label, Muted, Screen, Title } from '@/components/ui';
 
@@ -14,7 +13,7 @@ import { Button, Card, ErrorText, Field, Label, Muted, Screen, Title } from '@/c
 export default function SetupSelf() {
   const { session, intent, setIntent, signInSelf } = useSession();
   const [name, setName] = useState('');
-  const [character, setCharacter] = useState<CharacterPrefs>(() => CharacterPrefs.parse({}));
+  const [character] = useState<CharacterPrefs>(() => CharacterPrefs.parse({}));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -26,7 +25,6 @@ export default function SetupSelf() {
     try {
       const api = selfApi();
       const { subjectId, deviceToken } = await api.setup(name.trim());
-      await api.updateProfile({ character });
       await signInSelf({ role: 'self', userId: session.userId, token: deviceToken, subjectId, name: name.trim() });
     } catch (e) {
       setError(e);
@@ -38,12 +36,8 @@ export default function SetupSelf() {
   return (
     <Screen>
       <Title>Coach your own phone</Title>
-      <CharacterSays prefs={character} text={`Hi! I'm here to help you scroll less and do more of what you care about. Only you see this.`} />
+      <CharacterSays prefs={character} size={110} text="Hi, I'm Mello. Small steps, big journeys. I'll help you scroll less and do more of what you care about." />
       <Field label="What should I call you?" value={name} onChangeText={setName} placeholder="Your first name" autoComplete="given-name" />
-      <Card>
-        <Label>Pick your companion</Label>
-        <CharacterPicker value={character} onChange={setCharacter} />
-      </Card>
       <Card>
         <Label>What stays private</Label>
         <Muted>

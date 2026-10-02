@@ -10,7 +10,6 @@ import {
   AppLimit,
   BookInput,
   CharacterPrefs,
-  CHARACTERS,
   DeviceStatus,
   InstalledApp,
   KidSettings,
@@ -389,15 +388,12 @@ export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken }
     return c.json(config);
   });
 
-  /** A kid picks their buddy, among kid-friendly characters the parent allows. */
+  /** A kid picks Mello's colour and nickname. Kids always get the gentle tone. */
   kid.put('/me/character', async (c) => {
     const prefs = await body(c, CharacterPrefs);
     const k = (await repo.getKid(c.get('familyId'), c.get('kidId')))!;
-    const allowed = k.settings.allowedCharacters;
-    if (k.kind === 'kid' && (!CHARACTERS[prefs.characterId].kidFriendly || (allowed.length > 0 && !allowed.includes(prefs.characterId)))) {
-      throw new CodedError(403, 'Ask your parent to allow this buddy', 'character_not_allowed');
-    }
-    return c.json(await repo.updateSettings(c.get('familyId'), k.id, { character: prefs }));
+    const character = k.kind === 'kid' ? { ...prefs, tone: 'gentle' as const } : prefs;
+    return c.json(await repo.updateSettings(c.get('familyId'), k.id, { character }));
   });
 
   kid.post('/tasks/:taskId/progress', async (c) => {

@@ -15,7 +15,7 @@ export default function SelfLayout() {
       <Stack.Screen name="insights" options={{ title: 'Your habits' }} />
       <Stack.Screen name="goals" options={{ title: 'Goals' }} />
       <Stack.Screen name="coach" options={{ title: 'Talk' }} />
-      <Stack.Screen name="character" options={{ title: 'Your companion' }} />
+      <Stack.Screen name="character" options={{ title: 'Your Mello' }} />
       <Stack.Screen name="signout" options={{ title: 'Sign out' }} />
     </Stack>
   );
