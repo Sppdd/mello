@@ -1,6 +1,8 @@
 import { RuleInput, TaskInput } from '@mello/shared';
 import type { Repo } from './repo.ts';
 import { sendPush } from './push.ts';
+import { findKidContent, searchParenting } from './tavily.ts';
+import { weeklyInsight } from './insight.ts';
 import { fn, runToolLoop, str, type AgentAction, type AgentTurn, type Tool } from './toolLoop.ts';
 
 export type { AgentAction, AgentTurn } from './toolLoop.ts';
@@ -10,6 +12,8 @@ You can: list the kids, see which apps are on each kid's phone, set reading rule
 assign books, create tasks (listen to audio, watch a YouTube video, read an article, or read a book for N minutes) and
 optionally require a task before apps open, set daily time limits per app, set bedtime hours, send a spoken message
 to a kid's phone, check alerts (e.g. the gate was switched off), and report on reading and tasks.
+You can also search the web: find_content finds real, age-checked articles, YouTube videos or podcasts on a topic for a
+task, and search_web answers parenting questions from current sources. get_weekly_insight gives a deeper look at a kid's week.
 Guidelines:
 - Match apps by name to the package names from list_apps (e.g. "TikTok" -> com.zhiliaoapp.musically). Never invent package names.
 - If a request is ambiguous (which kid? which app?), ask one short question instead of guessing.
@@ -17,7 +21,12 @@ Guidelines:
 - Video tasks need a YouTube link; audio and article tasks need an https link. Ask for the link if it's missing.
 - Bedtime times are the kid's local time, given as HH:MM (24h).
 - After acting, confirm in one or two plain sentences what changed.
-- Messages to kids should be warm and short, and in the parent's voice ("Mom says...") only if the parent asks.`;
+- Write plain text for a phone screen: no markdown, no tables, no headings. Short lines; a simple "- " list is fine.
+- Messages to kids should be warm and short, and in the parent's voice ("Mom says...") only if the parent asks.
+- When the parent wants a task about a topic but has no link, call find_content, show the options (title + one line), and
+  create the task with the chosen link. Only ever use links that find_content returned.
+- When you answer from search_web, keep it short and practical and cite 1-3 sources as "(Source: site name)". Never
+  present web content as medical advice.`;
 
 const tools: Tool[] = [
   fn('list_kids', 'List the kids paired to this family, with their current book.', {}),
@@ -72,6 +81,18 @@ const tools: Tool[] = [
     ['kid', 'start', 'end'],
   ),
   fn('get_alerts', 'Recent alerts, e.g. a kid switched off the reading gate.', {}),
+  fn(
+    'find_content',
+    'Search the web for kid-safe learning content on a topic. Every result is checked for the kid\'s age before it is returned.',
+    {
+      kid: str('Kid name (used for their age)'),
+      topic: str('What it should be about, e.g. "volcanoes", "fractions", "kindness"'),
+      kind: { type: 'string', enum: ['video', 'article', 'audio'], description: 'Default video' },
+    },
+    ['kid', 'topic'],
+  ),
+  fn('search_web', 'Search current, reputable sources to answer a parenting question.', { question: str('The question to research') }, ['question']),
+  fn('get_weekly_insight', "A deeper analysis of a kid's last 7 days with suggested next steps (slower).", { kid: str('Kid name') }, ['kid']),
   fn('get_reading_report', "Summarize a kid's reading.", { kid: str('Kid name'), days: { type: 'integer', description: 'Look-back window, default 7' } }, ['kid']),
 ];
 
@@ -94,6 +115,8 @@ export async function executeTool(repo: Repo, familyId: string, name: string, ar
     const unknown = apps.filter((p) => !known.has(p));
     if (known.size > 0 && unknown.length) throw new Error(`Not installed on ${kid.name}'s phone: ${unknown.join(', ')}`);
   };
+  const label = (kid: { installedApps: { packageName: string; label: string }[] }, pkg: string) =>
+    kid.installedApps.find((a) => a.packageName === pkg)?.label ?? pkg;
   const hhmm = (v: string) => {
     const m = /^(\d{1,2}):(\d{2})$/.exec(String(v ?? '').trim());
     if (!m || +m[1]! > 23 || +m[2]! > 59) throw new Error(`Time must be HH:MM, got "${v}"`);
@@ -115,7 +138,7 @@ export async function executeTool(repo: Repo, familyId: string, name: string, ar
       const input = RuleInput.parse({ apps: args.apps, minutesRequired: args.minutes_required, unlockMinutes: args.unlock_minutes ?? undefined });
       const rule = await repo.addRule(kid.id, input);
       await sendPush(await repo.pushToken(kid.id), 'rules-changed');
-      actions.push({ tool: name, ok: true, summary: `${kid.name}: read ${rule.minutesRequired} min before ${rule.apps.join(', ')}` });
+      actions.push({ tool: name, ok: true, summary: `${kid.name}: read ${rule.minutesRequired} min before ${rule.apps.map((p) => label(kid, p)).join(', ')}` });
       return rule;
     }
     case 'delete_rule': {
@@ -140,7 +163,7 @@ export async function executeTool(repo: Repo, familyId: string, name: string, ar
         await repo.addRule(kid.id, RuleInput.parse({ apps, activity: 'task', taskId: task.id, minutesRequired: Math.min(task.requiredMinutes, 120) }));
       }
       await sendPush(await repo.pushToken(kid.id), 'rules-changed', { title: 'New task', body: task.title });
-      actions.push({ tool: name, ok: true, summary: `${kid.name}: ${task.kind} task "${task.title}" (${task.requiredMinutes} min)${apps.length ? ` before ${apps.join(', ')}` : ''}` });
+      actions.push({ tool: name, ok: true, summary: `${kid.name}: ${task.kind} task "${task.title}" (${task.requiredMinutes} min)${apps.length ? ` before ${apps.map((p) => label(kid, p)).join(', ')}` : ''}` });
       return task;
     }
     case 'list_tasks':
@@ -151,7 +174,7 @@ export async function executeTool(repo: Repo, familyId: string, name: string, ar
       const minutes = Math.max(0, Math.min(1440, Math.round(Number(args.minutes_per_day))));
       await repo.setLimit(kid.id, { packageName: args.app, dailyMinutes: minutes });
       await sendPush(await repo.pushToken(kid.id), 'rules-changed');
-      actions.push({ tool: name, ok: true, summary: `${kid.name}: ${args.app} limited to ${minutes} min/day` });
+      actions.push({ tool: name, ok: true, summary: `${kid.name}: ${label(kid, args.app)} limited to ${minutes} min/day` });
       return { ok: true };
     }
     case 'set_bedtime': {
@@ -176,6 +199,19 @@ export async function executeTool(repo: Repo, familyId: string, name: string, ar
     }
     case 'get_reading_report':
       return repo.report((await kidOf(args.kid)).id, args.days ?? 7);
+    case 'find_content': {
+      const kid = await kidOf(args.kid);
+      const picks = await findKidContent(String(args.topic ?? ''), args.kind ?? 'video', kid.settings.age ?? 9);
+      actions.push({ tool: name, ok: picks.length > 0, summary: `Found ${picks.length} kid-safe ${args.kind ?? 'video'}${picks.length === 1 ? '' : 's'} about ${args.topic}` });
+      return picks.length ? picks : { results: [], note: 'Nothing passed the age check. Suggest a different topic or ask for a link.' };
+    }
+    case 'search_web': {
+      const r = await searchParenting(String(args.question ?? ''));
+      actions.push({ tool: name, ok: true, summary: `Searched ${r.sources.length} sources` });
+      return r;
+    }
+    case 'get_weekly_insight':
+      return weeklyInsight(repo, familyId, await kidOf(args.kid));
     default:
       throw new Error(`Unknown tool ${name}`);
   }

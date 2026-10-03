@@ -50,6 +50,8 @@ export const KidSettings = z.object({
   photoProof: z.boolean().default(false),
   /** Only count reading/listening time while the phone is held and the screen is on. */
   attentionChecks: z.boolean().default(true),
+  /** The kid's age, so quizzes and suggested content fit. Unset = about 9. */
+  age: z.number().int().min(3).max(17).optional(),
   /** Mello's skin, tone and nickname for this kid (or self user). */
   character: CharacterPrefs.default(CharacterPrefs.parse({})),
 });

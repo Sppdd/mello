@@ -27,7 +27,9 @@ import { generateChallenge, grade } from './challenge.ts';
 import { runAgent } from './agent.ts';
 import { reflectionQuestions, reflectionReply, runCoach, streakOf } from './coach.ts';
 import { sendPush } from './push.ts';
-import { LlmUnavailableError } from './llm.ts';
+import { LlmUnavailableError, MODELS } from './llm.ts';
+import { findKidContent, searchEnabled, SearchUnavailableError } from './tavily.ts';
+import { weeklyInsight } from './insight.ts';
 import type { VerifyParentToken } from './auth.ts';
 
 type ParentEnv = { Variables: { userId: string; familyId: string | null } };
@@ -96,6 +98,7 @@ export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken }
     // Malformed UUID in a path or body: treat as "not found" rather than a server error.
     if ((err as any)?.code === '22P02') return c.json({ error: 'Not found' }, 404);
     if (err instanceof LlmUnavailableError) return c.json({ error: err.message, code: 'llm_unavailable' }, 503);
+    if (err instanceof SearchUnavailableError) return c.json({ error: err.message, code: 'search_unavailable' }, 503);
     // Token Factory refused or failed (bad key, no access to the model, outage): the phone falls back to time-only.
     if (err instanceof OpenAI.APIError) {
       console.error(`[llm] ${err.status} ${err.message}`);
@@ -105,7 +108,7 @@ export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken }
     return c.json({ error: 'Internal error' }, 500);
   });
 
-  app.get('/health', (c) => c.json({ ok: true }));
+  app.get('/health', (c) => c.json({ ok: true, ai: { provider: 'Nebius Token Factory', models: MODELS }, webSearch: searchEnabled() ? 'tavily' : null }));
 
   app.post('/pair', async (c) => {
     const { code, kidName } = await body(c, z.object({ code: z.string().regex(/^\d{6}$/), kidName: z.string().trim().min(1).max(40) }));
@@ -212,6 +215,14 @@ export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken }
     return c.json({ ok: true });
   });
   parent.get('/kids/:kidId/report', async (c) => c.json(await repo.report((await kidParam(c)).id, Number(c.req.query('days') ?? 7))));
+  /** Nemotron 3 Ultra's read of the kid's week. Slow (tens of seconds), so the app asks for it on demand. */
+  parent.get('/kids/:kidId/insight', async (c) => c.json(await weeklyInsight(repo, fam(c), await kidParam(c))));
+  /** Tavily search + Nemotron age screen: links a parent can turn into a task with one tap. */
+  parent.post('/kids/:kidId/content-ideas', async (c) => {
+    const kid = await kidParam(c);
+    const { topic, kind } = await body(c, z.object({ topic: z.string().trim().min(2).max(100), kind: z.enum(['video', 'article', 'audio']).default('video') }));
+    return c.json(await findKidContent(topic, kind, kid.settings.age ?? 9));
+  });
   parent.get('/kids/:kidId/messages', async (c) => c.json(await repo.listMessages((await kidParam(c)).id, baseUrl(c), false)));
 
   parent.get('/books', async (c) => c.json(await repo.listBooks(fam(c))));

@@ -4,6 +4,10 @@ FROM node:24-slim
 
 WORKDIR /app
 ENV NODE_ENV=production
+# Voice uploads. Container disks are wiped on redeploy; see docs/DEPLOY.md.
+ENV UPLOAD_DIR=/tmp/mello-audio
+# Only used when DATABASE_URL is unset (a throwaway demo database).
+ENV PGLITE_PATH=/tmp/mello-pglite
 
 # Install only the API and the shared package (not the mobile app). tsx runs the TypeScript directly.
 COPY package.json package-lock.json ./
@@ -18,4 +22,5 @@ COPY apps/api/tsconfig.json apps/api/
 
 USER node
 EXPOSE 8787
+HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch(`http://localhost:${process.env.PORT||8787}/health`).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["npm", "start", "--workspace", "@mello/api"]

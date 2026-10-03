@@ -96,7 +96,7 @@ export function clearKidDevice() {
   MelloBlocker.setQuietHours(null);
   if (MelloBlocker.getFocus()) MelloBlocker.breakGlass();
   MelloBlocker.consumeFocusResult();
-  MelloBlocker.setCharacter('Mello', '#5B5BD6', {}, false);
+  MelloBlocker.setCharacter('Mello', '#0F766E', {}, false);
   writeJson(CONFIG_CACHE, null);
   writeJson('progress', {});
 }

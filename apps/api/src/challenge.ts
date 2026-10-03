@@ -1,5 +1,5 @@
 import { GeneratedChallenge, isPassing, type ChallengeResult } from '@mello/shared';
-import { llm, LlmUnavailableError, MODEL } from './llm.ts';
+import { llm, LlmUnavailableError, MODELS } from './llm.ts';
 
 const SYSTEM = `You write short reading-comprehension checks for children.
 Given a passage the child just read, write 3 multiple-choice questions that can only be answered by someone who read it.
@@ -43,7 +43,7 @@ export async function generateChallenge(passage: string, age: number | null): Pr
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await llm().chat.completions.create({
-      model: MODEL,
+      model: MODELS.agent,
       temperature: 0.4,
       response_format: { type: 'json_schema', json_schema: { name: 'reading_challenge', strict: true, schema: CHALLENGE_SCHEMA } },
       messages: [

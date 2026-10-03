@@ -12,14 +12,37 @@ Android first. Work top to bottom; each part lists what's done in the repo and w
    docker build -f apps/api/Dockerfile -t mello-api .
    docker run -p 8787:8787 --env-file .env mello-api
    ```
-   Deploy that image to Fly.io, Render, Railway or Nebius compute. Health check: `GET /health`.
-3. **Environment** (see `.env.example`): `DATABASE_URL` (Supabase *transaction pooler*, port 6543), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `NEBIUS_API_KEY`, `PUBLIC_URL`, and optionally `EXPO_ACCESS_TOKEN`.
+   Health check: `GET /health` (it also reports the Nemotron model map and whether Tavily is set up).
+
+   **Current deployment: Google Cloud Run**, project `mello-hackathon-db2ac4`, region `asia-northeast1` (next to the Supabase database in Tokyo), at https://mello-api-69541089425.asia-northeast1.run.app.
+   ```sh
+   export CLOUDSDK_CORE_ACCOUNT=karrar90865@gmail.com P=mello-hackathon-db2ac4 R=asia-northeast1
+   IMG=$R-docker.pkg.dev/$P/mello/api:$(git rev-parse --short HEAD)
+   docker build --platform linux/amd64 -f apps/api/Dockerfile -t $IMG . && docker push $IMG
+   gcloud run deploy mello-api --image $IMG --region $R --project $P
+   ```
+   Secrets (`NEBIUS_API_KEY`, `DATABASE_URL`, `TAVILY_API_KEY`) live in Secret Manager and are mounted with `gcloud run services update mello-api --update-secrets KEY=secret-name:latest`. `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` are public values and are set as plain env vars.
+
+   **Nebius Serverless Endpoint** (the planned home, once AI Cloud is active on the tenant): push the same image to a Nebius registry and run
+   `nebius ai endpoint create --name mello-api --image <image> --platform cpu-d3 --preset 2vcpu-8gb --container-port 8787 --env-secret NEBIUS_API_KEY=<mysterybox secret> ...`.
+3. **Environment** (see `.env.example`): `DATABASE_URL` (Supabase pooler), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `NEBIUS_API_KEY`, `TAVILY_API_KEY`, `PUBLIC_URL`, and optionally `EXPO_ACCESS_TOKEN`. Turn on **Zero Data Retention** in the Token Factory account settings.
 4. **Before real users** (not built yet):
    - Move voice-message uploads from the container disk (`UPLOAD_DIR`) to Supabase Storage. Container disks are wiped on redeploy.
    - Rate-limit `/pair`, `/self/coach/chat`, `/self/reflect` and `/kid/challenges`. These cost LLM tokens or can be guessed.
    - Request logging and error reporting (Sentry).
 
 ## 2. Mobile app
+
+**Test build for judges (no EAS needed):** a signed release APK built locally and attached to a GitHub Release.
+```sh
+cd apps/mobile && npx expo prebuild --platform android
+cd android && EXPO_PUBLIC_API_URL=https://mello-api-69541089425.asia-northeast1.run.app NODE_ENV=production \
+  ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+gh release create v1.0.0 app/build/outputs/apk/release/app-release.apk#mello.apk --title "Mello 1.0.0" --notes-file ../../../docs/SUBMISSION.md
+```
+Release signing comes from `plugins/withReleaseSigning.js` and the `MELLO_UPLOAD_*` properties in `~/.gradle/gradle.properties`; the keystore lives outside the repo (`~/.mello-keys/`). **Back it up**: updates must be signed with the same key.
+
+### EAS (for the store)
 1. `cd apps/mobile && npx eas-cli init` to link an EAS project. This writes the project id into `app.json` and turns on push notifications.
 2. Set the build-time variables in EAS: `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Use `eas env:create` or the `env` blocks in `eas.json`.
 3. Builds (profiles in `eas.json`):

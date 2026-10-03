@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { FlatList, KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { parentApi, type AgentAction, type AgentTurn } from '@/lib/api';
@@ -7,7 +8,12 @@ import { Button, colors, ErrorText, Muted } from '@/components/ui';
 
 type Item = AgentTurn & { actions?: AgentAction[] };
 
-const EXAMPLES = ['Make Sara read 5 minutes before TikTok', 'Tell Adam dinner is ready', 'How much did Sara read this week?'];
+const EXAMPLES = [
+  'Make Sara read 5 minutes before TikTok',
+  'Find Sara a short video about volcanoes and make it a task before YouTube',
+  'How much screen time is right for an 8-year-old?',
+  'How did Sara do this week?',
+];
 
 export default function Agent() {
   useParentSession();
@@ -17,6 +23,16 @@ export default function Agent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const list = useRef<FlatList<Item>>(null);
+  // A next step tapped on the weekly insight arrives as ?prompt=… and is sent straight away.
+  const { prompt } = useLocalSearchParams<{ prompt?: string }>();
+  const sentPrompt = useRef<string | null>(null);
+  useEffect(() => {
+    if (prompt && sentPrompt.current !== prompt) {
+      sentPrompt.current = prompt;
+      send(prompt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompt]);
 
   const send = async (text: string) => {
     if (!text.trim() || busy) return;
