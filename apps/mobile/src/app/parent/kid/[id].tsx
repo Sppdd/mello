@@ -12,7 +12,7 @@ import type { AppLimit, Book, Kid, QuietHours, Rule, Task } from '@mello/shared'
 import { parentApi, type Report } from '@/lib/api';
 import { useParentSession } from '@/lib/session';
 import { Button, Card, Chip, ErrorText, Field, Label, Muted, Screen, Title } from '@/components/ui';
-import { BedtimeSection, LimitsSection, SettingsSection, TasksSection } from '@/components/parentSections';
+import { BedtimeSection, ContentIdeasSection, InsightSection, LimitsSection, SettingsSection, TasksSection } from '@/components/parentSections';
 
 const MINUTE_OPTIONS = [1, 2, 5, 10, 15];
 const UNLOCK_OPTIONS = [15, 30, 60];
@@ -82,7 +82,9 @@ export default function KidDetail() {
         </Card>
       )}
 
+      {kid && <InsightSection kid={kid} api={api} />}
       {kid && <TasksSection kid={kid} tasks={tasks} api={api} onChange={load} />}
+      {kid && <ContentIdeasSection kid={kid} api={api} onChange={load} />}
       {kid && <LimitsSection kid={kid} limits={limits} api={api} onChange={load} />}
       {kid && quiet !== undefined && <BedtimeSection key={JSON.stringify(quiet)} kid={kid} quiet={quiet} api={api} onChange={load} />}
 

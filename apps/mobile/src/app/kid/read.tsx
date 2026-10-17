@@ -182,7 +182,7 @@ export default function Read() {
               {q.choices.map((choice, ci) => {
                 const chosen = answers[qi] === ci;
                 const correct = result?.correctAnswers[qi] === ci;
-                const bg = result ? (correct ? '#DDF5E6' : chosen ? '#FBE1E1' : colors.card) : chosen ? '#E4E4FB' : colors.card;
+                const bg = result ? (correct ? '#DDF5E6' : chosen ? '#FBE1E1' : colors.card) : chosen ? colors.tealSoft : colors.card;
                 return (
                   <Pressable
                     key={ci}
@@ -223,7 +223,7 @@ export default function Read() {
       <Stack.Screen options={{ title: book?.title ?? 'Reading' }} />
 
       {rule && (
-        <View style={{ padding: 12, backgroundColor: done ? '#DDF5E6' : '#E4E4FB', gap: 8 }}>
+        <View style={{ padding: 12, backgroundColor: done ? '#DDF5E6' : colors.tealSoft, gap: 8 }}>
           <Label>{done ? `Nice reading! Answer a quick quiz to open ${appLabel}.` : `Read ${mmss(remaining)} more to open ${appLabel}`}</Label>
           {done && <Button title="Take the quiz" busy={quizBusy} onPress={startQuiz} />}
         </View>
@@ -234,7 +234,7 @@ export default function Read() {
       </ScrollView>
 
       {idle && (
-        <Pressable onPress={touch} style={{ padding: 12, backgroundColor: '#FFF1C2' }}>
+        <Pressable onPress={touch} style={{ padding: 12, backgroundColor: colors.sunSoft }}>
           <Text style={{ textAlign: 'center', color: colors.ink }}>Still reading? Tap here — the timer is paused.</Text>
         </Pressable>
       )}

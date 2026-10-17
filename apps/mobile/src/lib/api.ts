@@ -74,6 +74,9 @@ export type Family = { id: string; name: string; pairingCode: string; hasPasswor
 export type UnpairRequest = { id: string; kidId: string; kidName: string; createdAt: string };
 export type AgentTurn = { role: 'user' | 'assistant'; content: string };
 export type AgentAction = { tool: string; ok: boolean; summary: string };
+export type WeeklyInsight = { headline: string; wins: string[]; watch: string[]; nextSteps: { text: string; prompt: string }[]; model: string };
+export type ContentKind = 'video' | 'article' | 'audio';
+export type ContentPick = { kind: ContentKind; title: string; url: string; snippet: string; why: string; suggestedMinutes: number };
 export type Location = { lat: number; lng: number; accuracyM: number | null; recordedAt: string };
 
 /** Local calendar date on this phone, so "today" for tasks matches the kid's clock. */
@@ -129,6 +132,9 @@ export const parentApi = () => {
       form.append('audio', file(uri, 'message.m4a', 'audio/mp4'));
       return request<{ id: string }>('POST', `/parent/kids/${kidId}/messages`, t, form);
     },
+    insight: (kidId: string) => request<WeeklyInsight>('GET', `/parent/kids/${kidId}/insight`, t),
+    contentIdeas: (kidId: string, topic: string, kind: ContentKind) =>
+      request<ContentPick[]>('POST', `/parent/kids/${kidId}/content-ideas`, t, { topic, kind }),
     agent: (messages: AgentTurn[]) => request<{ reply: string; actions: AgentAction[] }>('POST', '/parent/agent/chat', t, { messages }),
   };
 };

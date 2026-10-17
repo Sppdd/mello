@@ -10,10 +10,10 @@ import {
   type SelfProfile,
   type UsageDay,
 } from '@mello/shared';
-import { llm, LlmUnavailableError, MODEL } from './llm.ts';
+import { llm, LlmUnavailableError, MODELS, stripThinking } from './llm.ts';
 import type { Repo } from './repo.ts';
 import { extractJson } from './challenge.ts';
-import { fn, runToolLoop, str, stripThinking, type AgentAction, type AgentTurn, type Tool } from './toolLoop.ts';
+import { fn, runToolLoop, str, type AgentAction, type AgentTurn, type Tool } from './toolLoop.ts';
 
 /**
  * The self-mode coach: the user's chosen character, helping them with their own phone habits.
@@ -29,7 +29,8 @@ Guidelines:
 - Ask one short question if a request is ambiguous.
 - Before changing a goal or limit, make sure the user asked for it. To start a focus session, call start_focus; the phone asks the user to confirm.
 - If interests are set and "always suggest" is on, end with one concrete suggestion (a book, podcast or topic) tied to an interest, when it fits.
-- After changing something, say what changed in plain words.`;
+- After changing something, say what changed in plain words.
+- Write plain text for a phone screen: no markdown, no tables, no headings. Short lines; a simple "- " list is fine.`;
 
 export type CoachContext = { userId: string; familyId: string; subject: Kid; profile: SelfProfile };
 
@@ -232,7 +233,7 @@ export async function reflectionQuestions(profile: SelfProfile, s: { appLabel: s
     : ['What did you read or listen to just now?', 'What stayed with you?'];
   try {
     const res = await llm().chat.completions.create({
-      model: MODEL,
+      model: MODELS.fast,
       temperature: 0.7,
       response_format: { type: 'json_schema', json_schema: { name: 'reflection', strict: true, schema: REFLECT_SCHEMA } },
       messages: [
@@ -258,7 +259,7 @@ Make them about what they took away, not a test. If you know the work, you may r
 export async function reflectionReply(profile: SelfProfile, questions: string[], answers: string[]): Promise<string | null> {
   try {
     const res = await llm().chat.completions.create({
-      model: MODEL,
+      model: MODELS.fast,
       temperature: 0.7,
       messages: [
         { role: 'system', content: `${personaPrompt(profile.character, profile.name)}\nReply to their reflection in 1–2 sentences: notice something specific they said. No questions back.` },

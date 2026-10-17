@@ -1,9 +1,9 @@
 import type OpenAI from 'openai';
-import { llm, MODEL, TOKEN_FACTORY_BASE_URL } from './llm.ts';
+import { llm, MODELS, stripThinking, TOKEN_FACTORY_BASE_URL } from './llm.ts';
 import { generateChallenge } from './challenge.ts';
 
 export type LiveCheck = { name: string; ok: boolean; ms: number; detail: string };
-export type LiveTestResult = { model: string; baseUrl: string; ok: boolean; ranAt: string; checks: LiveCheck[] };
+export type LiveTestResult = { model: string; models: typeof MODELS; baseUrl: string; ok: boolean; ranAt: string; checks: LiveCheck[] };
 
 const PASSAGE = `The tortoise had walked the same path every morning for forty years. It never hurried. While the hares raced
 to the river and back, then lay exhausted in the shade, the tortoise kept its slow, even pace, stopping only to eat the
@@ -21,53 +21,56 @@ async function timed(name: string, fn: () => Promise<string>): Promise<LiveCheck
 }
 
 /**
- * Checks the live AI path end to end against Nebius Token Factory: the key and model, a plain chat
- * completion, a tool call (what Mello's coach relies on) and a reading quiz in strict JSON.
+ * Checks the live AI path end to end against Nebius Token Factory: the key and the three Nemotron
+ * models, a chat on the fast model, a tool call on the agent model (what Mello's coach relies on) and
+ * a reading quiz in strict JSON.
  * Used by `GET /demo/live-test` and `npm run live-test`.
  */
 export async function runLiveTest(): Promise<LiveTestResult> {
   const checks: LiveCheck[] = [];
-  const done = () => ({ model: MODEL, baseUrl: TOKEN_FACTORY_BASE_URL, ok: checks.every((c) => c.ok), ranAt: new Date().toISOString(), checks });
+  const done = () => ({ model: MODELS.agent, models: MODELS, baseUrl: TOKEN_FACTORY_BASE_URL, ok: checks.every((c) => c.ok), ranAt: new Date().toISOString(), checks });
 
   let client: OpenAI;
   try {
     client = llm();
   } catch {
-    checks.push({ name: 'API key and model', ok: false, ms: 0, detail: 'NEBIUS_API_KEY is not set on the server' });
+    checks.push({ name: 'API key and models', ok: false, ms: 0, detail: 'NEBIUS_API_KEY is not set on the server' });
     return done();
   }
 
   checks.push(
-    await timed('API key and model', async () => {
+    await timed('API key and models', async () => {
       const ids: string[] = [];
       for await (const m of client.models.list()) ids.push(m.id);
-      if (!ids.includes(MODEL)) {
-        const nvidia = ids.filter((id) => id.toLowerCase().includes('nemotron')).slice(0, 8);
-        throw new Error(`${MODEL} is not in this account's model list. Nemotron models available: ${nvidia.join(', ') || 'none'}`);
+      const wanted = [...new Set(Object.values(MODELS))];
+      const missing = wanted.filter((id) => !ids.includes(id));
+      if (missing.length) {
+        const nemotron = ids.filter((id) => id.toLowerCase().includes('nemotron')).slice(0, 8);
+        throw new Error(`Not in this account's model list: ${missing.join(', ')}. Nemotron models available: ${nemotron.join(', ') || 'none'}`);
       }
-      return `${MODEL} is available (${ids.length} models on the account)`;
+      return `${wanted.join(', ')} available`;
     }),
   );
   if (!checks[0]!.ok) return done();
 
   checks.push(
-    await timed('Chat completion', async () => {
+    await timed(`Chat (${MODELS.fast.split('/').pop()})`, async () => {
       const res = await client.chat.completions.create({
-        model: MODEL,
+        model: MODELS.fast,
         temperature: 0,
         max_tokens: 300,
         messages: [{ role: 'user', content: 'Reply with one short friendly sentence from a calm tortoise named Mello.' }],
       });
-      const text = (res.choices[0]?.message?.content ?? '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      const text = stripThinking(res.choices[0]?.message?.content);
       if (!text) throw new Error('Empty reply');
       return `“${text.slice(0, 120)}”`;
     }),
   );
 
   checks.push(
-    await timed('Tool calling', async () => {
+    await timed(`Tool calling (${MODELS.agent.split('/').pop()})`, async () => {
       const res = await client.chat.completions.create({
-        model: MODEL,
+        model: MODELS.agent,
         temperature: 0,
         messages: [
           { role: 'system', content: 'You help the user manage their phone habits. Use the tools when asked to change something.' },

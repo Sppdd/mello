@@ -2,16 +2,23 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+/** Mello's palette (docs/brand, docs/design): warm cream, lagoon teal, apricot, sunflower and coral, with plum ink. */
 export const colors = {
   bg: '#FFF9F0',
   card: '#FFFFFF',
-  ink: '#1F2430',
-  muted: '#6B7280',
-  primary: '#5B5BD6',
+  ink: '#2B1B3D',
+  muted: '#6E6680',
+  primary: '#0F766E',
   primaryInk: '#FFFFFF',
-  good: '#1F9D55',
-  bad: '#D14343',
-  border: '#E8E2D6',
+  teal: '#14B8A6',
+  tealSoft: '#D5F5F0',
+  apricot: '#FFB37A',
+  sun: '#FFC93C',
+  sunSoft: '#FFF1C2',
+  coral: '#FF6B5B',
+  good: '#15803D',
+  bad: '#C9402F',
+  border: '#EADFCF',
 };
 
 export function Screen({ children, scroll = true }: { children: ReactNode; scroll?: boolean }) {

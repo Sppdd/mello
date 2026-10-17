@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Switch, Text, View } from 'react-native';
 import type { AppLimit, Kid, QuietHours, Task, TaskKind } from '@mello/shared';
-import type { parentApi } from '@/lib/api';
+import { router } from 'expo-router';
+import type { ContentKind, ContentPick, parentApi, WeeklyInsight } from '@/lib/api';
 import { Button, Card, Chip, colors, ErrorText, Field, Label, Muted } from './ui';
 
 type Api = ReturnType<typeof parentApi>;
@@ -195,13 +196,109 @@ export function TasksSection({ kid, tasks, api, onChange }: { kid: Kid; tasks: T
   );
 }
 
+// ---------- Weekly insight (Nemotron 3 Ultra) ----------
+
+export function InsightSection({ kid, api }: { kid: Kid; api: Api }) {
+  const [insight, setInsight] = useState<WeeklyInsight | null>(null);
+  const { busy, error, run } = useAction();
+  return (
+    <Card>
+      <Label>Mello's read on {kid.name}'s week</Label>
+      {!insight && <Muted>Mello looks at the last 7 days of reading, tasks, limits and alerts, and suggests what to try next.</Muted>}
+      {insight && (
+        <>
+          <Text style={{ color: colors.ink, fontSize: 17, fontWeight: '700' }}>{insight.headline}</Text>
+          {insight.wins.map((w) => (
+            <Text key={w} style={{ color: colors.good, fontSize: 15 }}>
+              ✓ {w}
+            </Text>
+          ))}
+          {insight.watch.map((w) => (
+            <Text key={w} style={{ color: colors.bad, fontSize: 15 }}>
+              • {w}
+            </Text>
+          ))}
+          {insight.nextSteps.map((n) => (
+            <Button key={n.text} title={n.text} variant="secondary" onPress={() => router.push({ pathname: '/parent/agent', params: { prompt: n.prompt } })} />
+          ))}
+          <Muted>Written by NVIDIA Nemotron on Nebius. Tap a step to ask Mello to do it.</Muted>
+        </>
+      )}
+      <ErrorText error={error} />
+      <Button title={insight ? 'Refresh' : 'Get weekly insight'} variant={insight ? 'secondary' : 'primary'} busy={busy} onPress={() => run(async () => setInsight(await api.insight(kid.id)))} />
+    </Card>
+  );
+}
+
+// ---------- Content ideas (Tavily search, age-checked by Nemotron) ----------
+
+const IDEA_KINDS: { kind: ContentKind; label: string }[] = [
+  { kind: 'video', label: 'Video' },
+  { kind: 'article', label: 'Article' },
+  { kind: 'audio', label: 'Podcast' },
+];
+
+export function ContentIdeasSection({ kid, api, onChange }: { kid: Kid; api: Api; onChange: () => void }) {
+  const [topic, setTopic] = useState('');
+  const [kind, setKind] = useState<ContentKind>('video');
+  const [picks, setPicks] = useState<ContentPick[] | null>(null);
+  const [added, setAdded] = useState<string[]>([]);
+  const { busy, error, run } = useAction();
+  const age = kid.settings.age ?? 9;
+
+  const assign = (p: ContentPick) =>
+    run(() => api.addTask(kid.id, { kind: p.kind, title: p.title.slice(0, 80), url: p.url, requiredMinutes: Math.min(Math.max(p.suggestedMinutes, 5), 60), repeat: 'once' })).then(
+      (ok) => ok && (setAdded((a) => [...a, p.url]), onChange()),
+    );
+
+  return (
+    <Card>
+      <Label>Find something to learn</Label>
+      <Muted>
+        Mello searches the web for a topic and checks every result for a {age}-year-old before you see it. Tap one to make it a task.
+      </Muted>
+      <Field label="Topic" value={topic} onChangeText={setTopic} placeholder="volcanoes, fractions, kindness…" returnKeyType="search" />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        {IDEA_KINDS.map((k) => (
+          <Chip key={k.kind} label={k.label} selected={kind === k.kind} onPress={() => setKind(k.kind)} />
+        ))}
+      </View>
+      <ErrorText error={error} />
+      <Button title="Search" busy={busy} disabled={topic.trim().length < 2} onPress={() => run(async () => setPicks(await api.contentIdeas(kid.id, topic.trim(), kind)))} />
+      {picks?.length === 0 && <Muted>Nothing passed the age check. Try another topic.</Muted>}
+      {picks?.map((p) => (
+        <View key={p.url} style={{ gap: 4, borderTopWidth: 1, borderColor: colors.border, paddingTop: 10 }}>
+          <Text style={{ color: colors.ink, fontSize: 16, fontWeight: '600' }}>{p.title}</Text>
+          <Muted>{p.why}</Muted>
+          <Muted>{p.url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]} · about {p.suggestedMinutes} min</Muted>
+          <Button
+            title={added.includes(p.url) ? 'Added as a task ✓' : `Assign to ${kid.name}`}
+            variant="secondary"
+            disabled={added.includes(p.url) || busy}
+            onPress={() => assign(p)}
+          />
+        </View>
+      ))}
+    </Card>
+  );
+}
+
 // ---------- Opt-in extras ----------
+
+const AGES = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 
 export function SettingsSection({ kid, api, onChange }: { kid: Kid; api: Api; onChange: () => void }) {
   const { error, run } = useAction();
   const toggle = (key: 'location' | 'attentionChecks', value: boolean) => run(() => api.updateSettings(kid.id, { [key]: value })).then(onChange);
   return (
     <Card>
+      <Label>{kid.name}'s age</Label>
+      <Muted>Quizzes and suggested videos and articles fit this age.</Muted>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {AGES.map((a) => (
+          <Chip key={a} label={String(a)} selected={kid.settings.age === a} onPress={() => run(() => api.updateSettings(kid.id, { age: a })).then(onChange)} />
+        ))}
+      </View>
       <Label>Extras</Label>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <View style={{ flex: 1 }}>

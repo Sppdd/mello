@@ -1,8 +1,8 @@
 # Mello: hackathon pitch kit
 
-**Event:** Nebius × NVIDIA Global AI Hackathon (Devpost). **Track:** Personal AI.
+**Event:** Nebius × NVIDIA Global AI Hackathon (Devpost). **Track:** pick one before submitting. [SUBMISSION.md](../SUBMISSION.md) enters **Best Apps and Agents** (the parent agent); this kit was written for **Personal AI** (Mello coaching your own phone). The demo and live test fit both.
 **One line:** Mello is a calm tortoise companion on your phone that turns "open Instagram" into "ten minutes of reading first".
-**Built on:** NVIDIA Nemotron 3 Super via Nebius Token Factory.
+**Built on:** NVIDIA Nemotron 3 on Nebius Token Factory: Nano (fast), Super (agent and quiz), Ultra (weekly insight).
 
 > Check the official Devpost rules before submitting. The summary below comes from public listings: they ask for a project that runs on Nebius Token Factory or AI Cloud and uses at least one NVIDIA open model, a working demo URL, and a public repo with an open-source licence and a README. Judging weighs technological implementation, design, potential impact and quality of the idea equally.
 
@@ -21,7 +21,7 @@ Most of us open social apps on autopilot, and the tools that try to help either 
 - **Families:** a parent mode applies the same gate to kids' phones, with an agent the parent can talk to.
 
 ### How we built it
-- **AI:** NVIDIA **Nemotron 3 Super** on **Nebius Token Factory**, through its OpenAI-compatible API, for three jobs:
+- **AI:** NVIDIA **Nemotron 3** on **Nebius Token Factory**, through its OpenAI-compatible API. Each job uses the size that fits it: Nano for fast calls, Super for tool calling and quizzes, Ultra for the weekly insight. Three jobs matter most here:
   1. **Tool calling:** Mello's coach is a tool-calling loop over the user's own goals, limits, wind-down hours and interests. It runs on the same backend as the parent agent.
   2. **Structured output:** reading quizzes use a strict JSON schema. The server keeps the answers and grades them itself, so the phone never sees them.
   3. **Short, in-character writing:** reflection questions and replies come from one persona prompt, with tone set by the user.
@@ -92,9 +92,9 @@ Open `https://<host>/demo` in a desktop browser and turn sound on. Times are cum
 ---
 
 ## 5. Submission checklist
-- [ ] `npm run live-test -w @mello/api` passes against **your** Token Factory account. If check 1 fails, set `NEBIUS_MODEL` to a Nemotron ID it lists.
-- [ ] The demo is deployed with `DEMO=1` (see `docs/DEPLOY.md` §0), and **Run live test** is green on the public URL.
+- [ ] `npm run live-test -w @mello/api` passes against **your** Token Factory account. If check 1 fails, set `NEBIUS_MODEL_FAST` / `_AGENT` / `_REASONING` to the Nemotron IDs it lists.
+- [ ] `DEMO=1` is set on the hosted API (Cloud Run, see `docs/DEPLOY.md`), `/demo` loads, and **Run live test** is green.
 - [ ] The README has the demo URL instead of `<your demo URL>`.
 - [ ] The repository is **public**, with `LICENSE` (MIT) and the README.
-- [ ] The video is uploaded (if Devpost asks for one), and the track is set to **Personal AI**.
+- [ ] The video is uploaded (if Devpost asks for one), and the track on Devpost matches SUBMISSION.md and this kit.
 - [ ] Team members are added on Devpost; the deadline (30 Oct 2026, 10:00 PT per listings) is double-checked on the official page.

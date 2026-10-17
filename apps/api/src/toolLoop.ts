@@ -1,13 +1,10 @@
 import type OpenAI from 'openai';
-import { llm, MODEL } from './llm.ts';
+import { llm, MODELS, stripThinking } from './llm.ts';
 
 export type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 export type Tool = OpenAI.Chat.Completions.ChatCompletionTool;
 export type AgentTurn = { role: 'user' | 'assistant'; content: string };
 export type AgentAction = { tool: string; ok: boolean; summary: string };
-/** Drops reasoning blocks some models (e.g. Nemotron with reasoning on) put before the answer. */
-export const stripThinking = (text: string | null | undefined) => (text ?? '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-
 export type ExecuteTool = (name: string, args: any, actions: AgentAction[]) => Promise<unknown>;
 
 /**
@@ -19,7 +16,7 @@ export async function runToolLoop(system: string, tools: Tool[], execute: Execut
   const actions: AgentAction[] = [];
 
   for (let step = 0; step < 8; step++) {
-    const res = await llm().chat.completions.create({ model: MODEL, temperature: opts.temperature ?? 0.2, messages, tools });
+    const res = await llm().chat.completions.create({ model: MODELS.agent, temperature: opts.temperature ?? 0.2, messages, tools });
     const msg = res.choices[0]?.message;
     if (!msg) break;
     messages.push(msg);

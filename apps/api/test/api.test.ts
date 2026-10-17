@@ -25,6 +25,8 @@ import { Repo } from '../src/repo.ts';
 import { executeTool, type AgentAction } from '../src/agent.ts';
 import { executeCoachTool } from '../src/coach.ts';
 import { extractJson, grade } from '../src/challenge.ts';
+import { isBlocked } from '../src/tavily.ts';
+import { MODELS, stripThinking } from '../src/llm.ts';
 
 // ---------- pure logic ----------
 
@@ -223,6 +225,33 @@ describe('HTTP API', () => {
     const { call, kid } = await setup();
     expect((await call('POST', '/kid/challenges', kid.deviceToken, { bookId: null, passage: 'x'.repeat(200) })).status).toBe(503);
     process.env.NEBIUS_API_KEY = saved;
+  });
+
+  it('reports Nemotron models in /health, and 503s content ideas without a Tavily key', async () => {
+    const saved = process.env.TAVILY_API_KEY;
+    delete process.env.TAVILY_API_KEY;
+    const { call, parentToken, kid } = await setup();
+    const health = (await call('GET', '/health')).body;
+    expect(Object.values(health.ai.models).every((m) => String(m).startsWith('nvidia/'))).toBe(true);
+    expect(health.webSearch).toBeNull();
+    const res = await call('POST', `/parent/kids/${kid.kidId}/content-ideas`, parentToken, { topic: 'volcanoes' });
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('search_unavailable');
+    if (saved) process.env.TAVILY_API_KEY = saved;
+  });
+});
+
+describe('web search safety', () => {
+  it('blocks social feeds and plain http, allows normal https pages', () => {
+    expect(isBlocked('https://www.reddit.com/r/kids')).toBe(true);
+    expect(isBlocked('https://m.tiktok.com/@x')).toBe(true);
+    expect(isBlocked('http://example.org/page')).toBe(true);
+    expect(isBlocked('not a url')).toBe(true);
+    expect(isBlocked('https://kids.nationalgeographic.com/science/article/volcano')).toBe(false);
+  });
+  it('uses NVIDIA Nemotron by default and strips leaked thinking', () => {
+    if (!process.env.NEBIUS_MODEL) expect(MODELS.reasoning).toMatch(/^nvidia\/Nemotron-3-Ultra/);
+    expect(stripThinking('<think>hmm</think> Hello')).toBe('Hello');
   });
 });
 
@@ -576,7 +605,7 @@ describe('public demo', () => {
     const chat = await call('POST', '/demo/coach', s.body.token, { messages: [{ role: 'user', content: 'hi' }] });
     expect(chat).toMatchObject({ status: 503, body: { code: 'llm_unavailable' } });
     const live = await call('GET', '/demo/live-test');
-    expect(live.body).toMatchObject({ ok: false, checks: [{ name: 'API key and model', ok: false }] });
+    expect(live.body).toMatchObject({ ok: false, checks: [{ name: 'API key and models', ok: false }] });
     process.env.NEBIUS_API_KEY = saved;
   });
 
