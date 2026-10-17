@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mello · Live demo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Cpath d=%22M10 80 Q12 50 50 48 Q88 50 90 80 Z%22 fill=%22%236E665A%22/%3E%3Cpath d=%22M18 34 Q18 8 50 7 Q82 8 82 34 Q82 52 50 53 Q18 52 18 34 Z%22 fill=%22%238A8070%22/%3E%3Ccircle cx=%2231%22 cy=%2232%22 r=%226%22 fill=%22%232A2620%22/%3E%3Ccircle cx=%2269%22 cy=%2232%22 r=%226%22 fill=%22%232A2620%22/%3E%3C/svg%3E">
+<meta name="description" content="Mello is a calm personal companion that turns 'open Instagram' into 'ten minutes of reading first'. Powered by NVIDIA Nemotron on Nebius Token Factory.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap">
+<style>
+/* Layout: header strip, then phone (left) + Mello chat (right), live test underneath. Stacks on phones. */
+:root {
+  --bg: #F6F3EC; --surface: #FFFFFF; --surface-2: #F1ECE2; --line: #E4DCCD; --fg: #2A2620; --muted: #716A5E;
+  --olive: #6B7F2E; --olive-deep: #4E5E1F; --olive-soft: #EAF0D6;
+  --sun: #FFC93C; --sun-deep: #D99A0B; --coral: #E5624F; --coral-deep: #B4402F; --good: #3E8E4F;
+  --nv: #76B900; --bezel: #2A2620;
+  --font: "Nunito", ui-rounded, system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #17140F; --surface: #221E17; --surface-2: #2C2720; --line: #3B342A; --fg: #F3EEE4; --muted: #B5AC9C; --olive-soft: #2D3418; --bezel: #0B0907; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-weight: 700; font-size: 15px; line-height: 1.4; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 18px; padding-block: 20px 56px; display: flex; flex-direction: column; gap: 22px; }
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 900; letter-spacing: -.5px; text-wrap: balance; }
+h2 { font-size: 20px; font-weight: 900; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 900; }
+.badge i { width: 10px; height: 10px; border-radius: 50%; background: var(--nv); }
+.grid { display: grid; grid-template-columns: minmax(300px, 360px) 1fr; gap: 22px; align-items: start; }
+@media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 2px solid var(--line); border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* phone */
+.phone { width: 100%; max-width: 340px; margin: 0 auto; aspect-ratio: 340 / 700; background: var(--bezel); border-radius: 46px; padding: 10px; box-shadow: 0 20px 40px -20px rgba(0,0,0,.45); }
+.screen { position: relative; height: 100%; border-radius: 36px; overflow: hidden; background: #FFFFFF; color: #2A2620; display: flex; flex-direction: column; }
+.status { display: flex; justify-content: space-between; padding: 12px 22px 4px; font-size: 12px; font-weight: 800; }
+.view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 8px 20px; }
+.say { font-size: 19px; font-weight: 900; line-height: 1.25; text-wrap: balance; }
+.foot { padding: 10px 18px 18px; display: flex; flex-direction: column; gap: 2px; }
+.btn { font: inherit; font-weight: 900; text-transform: uppercase; letter-spacing: .8px; font-size: 14px; border: 0; border-radius: 16px; padding: 14px 16px; width: 100%; min-height: 50px; cursor: pointer; color: #fff; background: var(--olive); box-shadow: 0 4px 0 var(--olive-deep); transition: transform .06s, box-shadow .06s; }
+.btn:active { transform: translateY(4px); box-shadow: 0 0 0 var(--olive-deep); }
+.btn[disabled] { opacity: .45; cursor: default; }
+.btn.small { width: auto; min-height: 40px; padding: 9px 14px; font-size: 12px; border-radius: 12px; }
+.link { font: inherit; font-weight: 900; font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--olive-deep); background: none; border: 0; padding: 10px; cursor: pointer; min-height: 44px; }
+.btn:focus-visible, .link:focus-visible, .opt:focus-visible, .appicon:focus-visible, .chip:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+
+.home { position: absolute; inset: 0; background: linear-gradient(170deg, #4E5E1F 0%, #8A9A4A 50%, #E9C98F 100%); padding: 44px 16px 16px; display: flex; flex-direction: column; gap: 16px; }
+.icons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px 8px; }
+.appicon { font: inherit; background: none; border: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; color: #fff; font-size: 11px; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.35); padding: 0; }
+.appicon i { width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; font-style: normal; font-size: 22px; font-weight: 900; color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.18); }
+.hint { align-self: center; background: rgba(255,255,255,.92); color: #2A2620; border-radius: 14px; padding: 8px 12px; font-size: 13px; font-weight: 900; animation: nudge 1.8s ease-in-out infinite; }
+@keyframes nudge { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+.feed { position: absolute; inset: 0; background: #101014; color: #E8E8EE; display: flex; flex-direction: column; }
+.feed .bar { display: flex; justify-content: space-between; align-items: center; padding: 40px 16px 6px; font-weight: 900; }
+.feed .post { margin: 10px 12px 0; border-radius: 14px; background: #24242C; height: 150px; }
+.feed .post.tall { height: 220px; background: linear-gradient(160deg, #3A3150, #1D2A3A); }
+.feed .meta { margin: 8px 14px 0; height: 10px; width: 60%; border-radius: 6px; background: #2C2C36; }
+.pill { position: absolute; top: 74px; right: 12px; display: flex; align-items: center; gap: 6px; padding: 5px 12px 5px 5px; border-radius: 999px; background: var(--olive); color: #fff; font-weight: 900; font-size: 13px; box-shadow: 0 4px 0 rgba(0,0,0,.3); }
+.pill span.h { width: 28px; height: 28px; border-radius: 50%; background: #fff; display: grid; place-items: center; overflow: hidden; }
+.reader { flex: 1; overflow-y: auto; margin: 0 14px; padding: 14px; background: #F7F1E3; border-radius: 14px; font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 14.5px; line-height: 1.6; color: #3B3226; }
+.reader p + p { margin-top: 10px; }
+.timer { display: flex; align-items: center; gap: 10px; padding: 10px 16px; }
+.timer .ring { width: 54px; height: 54px; flex: none; }
+.opt { font: inherit; display: block; width: 100%; text-align: left; border: 2px solid #E4DCCD; border-bottom-width: 4px; background: #fff; color: #2A2620; border-radius: 14px; padding: 11px 12px; cursor: pointer; font-weight: 800; }
+.opt.sel { border-color: var(--olive); background: #EAF0D6; }
+.opt.right { border-color: var(--good); background: #DFF2E2; }
+.opt.wrong { border-color: var(--coral); background: #FBE1DC; }
+.progress { height: 14px; background: #F1ECE2; border-radius: 99px; overflow: hidden; margin: 6px 16px 0; }
+.progress i { display: block; height: 100%; background: var(--olive); border-radius: 99px; transition: width .3s; }
+.next { width: 100%; background: #fff; border: 2px solid #E4DCCD; border-bottom-width: 5px; border-radius: 20px; padding: 12px; display: flex; align-items: center; gap: 12px; text-align: left; }
+.next b { font-size: 16px; }
+.rows { width: 100%; display: flex; flex-direction: column; gap: 6px; text-align: left; font-size: 13px; }
+.rows div { display: flex; justify-content: space-between; border-bottom: 1px solid #F1ECE2; padding-bottom: 4px; }
+.bars { width: 100%; display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; align-items: end; height: 70px; }
+.bars span { display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; height: 100%; }
+.bars s { display: block; border-radius: 4px; text-decoration: none; }
+.legend { display: flex; gap: 12px; font-size: 11px; color: #716A5E; }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 4px; }
+.loading { display: inline-block; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #E4DCCD; border-top-color: var(--olive); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Mello drawing */
+.mello { display: inline-block; transform-origin: 50% 100%; animation: breathe 3.4s ease-in-out infinite; }
+@keyframes breathe { 0%,100% { transform: translateY(0) scaleY(1) rotate(-1deg); } 50% { transform: translateY(-1.5px) scaleY(1.025) rotate(1deg); } }
+.mello .closed, .mello .mouth-open { display: none; }
+.mello.blink .open-eyes { display: none; }
+.mello.blink .closed { display: inline; }
+.mello.talk .mouth-shut { display: none; }
+.mello.talk .mouth-open { display: inline; }
+@media (prefers-reduced-motion: reduce) { .mello, .hint, .loading { animation: none; } }
+
+/* chat */
+.chat { display: flex; flex-direction: column; gap: 10px; min-height: 420px; }
+.msgs { flex: 1; display: flex; flex-direction: column; gap: 10px; max-height: 520px; overflow-y: auto; padding-right: 4px; }
+.msg { max-width: 85%; border-radius: 16px; padding: 10px 12px; font-size: 15px; }
+.msg.user { align-self: flex-end; background: var(--olive); color: #fff; }
+.msg.mello { align-self: flex-start; background: var(--surface-2); }
+.msg .tools { margin-top: 6px; font-size: 12px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+.hello { display: flex; align-items: center; gap: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: inherit; font-weight: 800; border: 2px solid var(--line); border-bottom-width: 4px; background: var(--surface); color: var(--fg); border-radius: 14px; padding: 8px 12px; cursor: pointer; min-height: 44px; text-align: left; }
+.composer { display: flex; gap: 8px; }
+.composer input { flex: 1; min-width: 0; font: inherit; font-weight: 700; border: 2px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 14px; padding: 12px; }
+.composer .btn { width: auto; }
+.toggles { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
+.toggles label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+/* live test */
+.checks { display: flex; flex-direction: column; gap: 8px; }
+.check { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: start; border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.check .dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 13px; font-weight: 900; }
+.check .detail { font-size: 13px; color: var(--muted); word-break: break-word; }
+.foot-note { font-size: 13px; color: var(--muted); max-width: 70ch; }
+.err { color: var(--coral); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <span id="logo"></span>
+      <div>
+        <h1>Mello</h1>
+        <p class="muted">Small steps, big journeys. A calm companion that turns “open Instagram” into “ten minutes of reading first”.</p>
+      </div>
+    </div>
+    <div class="badges">
+      <span class="badge"><i></i>NVIDIA Nemotron</span>
+      <span class="badge">Nebius Token Factory</span>
+      <span class="badge">Personal AI</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="ph">
+      <h2 id="ph">Sam's phone</h2>
+      <div class="phone"><div class="screen" id="screen"></div></div>
+      <p class="foot-note">A sandbox phone just for you. It lasts two hours and is then deleted.</p>
+    </section>
+
+    <section class="card chat" aria-labelledby="ch">
+      <h2 id="ch">Talk to Mello</h2>
+      <div class="msgs" id="msgs" aria-live="polite"></div>
+      <div class="chips" id="chips"></div>
+      <form class="composer" id="composer">
+        <label for="input" style="position:absolute;left:-9999px">Message Mello</label>
+        <input id="input" maxlength="500" placeholder="Ask Mello about Sam's habits…" autocomplete="off">
+        <button class="btn" type="submit" id="send">Send</button>
+      </form>
+      <div class="toggles">
+        <label><input type="checkbox" id="hood"> Show what Nemotron did</label>
+        <label><input type="checkbox" id="voice" checked> Mello talks out loud</label>
+      </div>
+      <p class="err" id="chatErr" hidden></p>
+    </section>
+  </div>
+
+  <section class="card" aria-labelledby="lt">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px">
+      <div>
+        <h2 id="lt">Live test</h2>
+        <p class="muted" id="ltModel">Checks the AI path on Nebius Token Factory right now.</p>
+      </div>
+      <button class="btn small" id="runTest" type="button">Run live test</button>
+    </div>
+    <div class="checks" id="checks"></div>
+    <p class="foot-note">What reaches the model: your chat messages, the reading passage, and Sam's daily totals (minutes per app). Never screen content, contacts or location.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ---------- Mello, drawn after the character sheet ----------
+  const C = { skin: '#8A8070', plate: '#D9C39A', shell: '#6E665A', line: '#4A443B', ink: '#2A2620' };
+  function mello(mood = 'happy', size = 120) {
+    const closed = mood === 'proud' || mood === 'content';
+    const eye = (cx) => closed
+      ? `<path d="M${cx - 5} 33 Q${cx} ${mood === 'proud' ? 28 : 36} ${cx + 5} 33" stroke="${C.ink}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`
+      : `<g class="open-eyes"><circle cx="${cx}" cy="32" r="${mood === 'curious' ? 6.4 : 5.6}" fill="${C.ink}"/><circle cx="${cx + 1.8}" cy="30" r="1.8" fill="#fff"/></g><path class="closed" d="M${cx - 5} 33 Q${cx} 36 ${cx + 5} 33" stroke="${C.ink}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
+    const shut = { worried: 'M36 45 Q50 40 64 45', sleepy: 'M42 43 Q50 46 58 43', proud: 'M32 40 Q50 53 68 40' }[mood] || 'M33 41 Q50 50 67 41';
+    const excited = mood === 'excited';
+    return `<span class="mello" data-mello><svg width="${size}" height="${size}" viewBox="0 0 100 100" role="img" aria-label="Mello the tortoise, ${mood}">
+      <ellipse cx="50" cy="95" rx="34" ry="3.5" fill="${C.ink}" opacity=".12"/>
+      <path d="M10 80 Q12 50 50 48 Q88 50 90 80 Z" fill="${C.shell}" stroke="${C.line}" stroke-width="2"/>
+      <path d="M24 66 L36 58 L50 62 L64 58 L76 66 M36 58 L38 50 M64 58 L62 50 M50 62 L50 78" stroke="${C.line}" stroke-width="1.6" fill="none"/>
+      <rect x="22" y="78" width="16" height="16" rx="7" fill="${C.skin}" stroke="${C.ink}" stroke-width="1.4"/><rect x="62" y="78" width="16" height="16" rx="7" fill="${C.skin}" stroke="${C.ink}" stroke-width="1.4"/>
+      <path d="M36 46 Q35 70 38 84 L62 84 Q65 70 64 46 Z" fill="${C.skin}" stroke="${C.ink}" stroke-width="1.4"/>
+      <path d="M40 60 Q50 64 60 60 M40 68 Q50 72 60 68" stroke="${C.ink}" stroke-width="1" opacity=".35" fill="none"/>
+      <g transform="rotate(${mood === 'curious' ? -7 : 0} 50 46)">
+        <path d="M18 34 Q18 8 50 7 Q82 8 82 34 Q82 52 50 53 Q18 52 18 34 Z" fill="${C.skin}" stroke="${C.ink}" stroke-width="1.6"/>
+        <path d="M27 42 Q50 56 73 42 Q66 52 50 53 Q34 52 27 42 Z" fill="${C.plate}" opacity=".9"/>
+        <path d="M45 14 Q50 12 55 14 L54 34 Q50 37 46 34 Z" fill="${C.plate}" stroke="${C.ink}" stroke-width=".8"/>
+        <circle cx="45" cy="11.5" r="1.7" fill="${C.ink}"/><circle cx="55" cy="11.5" r="1.7" fill="${C.ink}"/>
+        ${eye(31)}${eye(69)}
+        ${mood === 'worried' ? `<path d="M25 23 L35 25 M75 23 L65 25" stroke="${C.ink}" stroke-width="1.8" stroke-linecap="round"/>` : ''}
+        ${excited ? '' : `<path class="mouth-shut" d="${shut}" stroke="${C.ink}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`}
+        <g class="${excited ? '' : 'mouth-open'}"><path d="M34 41 Q50 56 66 41 Q50 47 34 41 Z" fill="${C.ink}"/><ellipse cx="50" cy="49" rx="6" ry="2.6" fill="#F28C8C"/></g>
+      </g></svg></span>`;
+  }
+  // Blink every few seconds, everywhere Mello appears.
+  setInterval(() => {
+    document.querySelectorAll('[data-mello]').forEach((m) => { m.classList.add('blink'); setTimeout(() => m.classList.remove('blink'), 140); });
+  }, 3600);
+  let talkTimer = null;
+  const talking = (on) => {
+    clearInterval(talkTimer);
+    document.querySelectorAll('[data-mello]').forEach((m) => m.classList.remove('talk'));
+    if (on) talkTimer = setInterval(() => document.querySelectorAll('[data-mello]').forEach((m) => m.classList.toggle('talk')), 150);
+  };
+  const say = (text) => {
+    if (!document.getElementById('voice').checked || !('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.92; u.pitch = 0.95;
+    u.onstart = () => talking(true); u.onend = () => talking(false); u.onerror = () => talking(false);
+    speechSynthesis.speak(u);
+  };
+  document.getElementById('logo').innerHTML = mello('happy', 64);
+
+  // ---------- API ----------
+  // Works whether the page is served at /demo or /demo/.
+  const BASE = location.pathname.replace(/\/$/, '') || '/demo';
+  let token = null, state = null;
+  const api = async (method, path, body) => {
+    const res = await fetch(`${BASE}${path}`, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { const e = new Error(data.error || `Request failed (${res.status})`); e.code = data.code; e.status = res.status; throw e; }
+    return data;
+  };
+
+  // ---------- the phone ----------
+  const screen = document.getElementById('screen');
+  const statusBar = (dark) => `<div class="status" style="${dark ? 'color:#E8E8EE;position:absolute;top:0;left:0;right:0;z-index:2' : ''}"><span class="num">9:41</span><span>●●● ▮</span></div>`;
+  const PASSAGE = [
+    'The tortoise had walked the same path every morning for forty years. It never hurried. While the hares raced to the river and back, then lay exhausted in the shade, the tortoise kept its slow, even pace, stopping only to eat the yellow flowers that grew beside the old stone wall.',
+    'One spring a young hare, restless and bored, asked how it could stand being so slow. "Every day the same path," said the hare. "Don\'t you want to get somewhere?"',
+    '"I am not slow," said the tortoise. "I simply never stop. Ten small steps today, ten tomorrow. In a year I have crossed the valley, and I remember every flower on the way."',
+    'The hare laughed and ran off. But that evening, too tired to race, it found itself walking beside the stone wall. By summer it walked there every morning, and it had started to notice the yellow flowers too.',
+  ];
+  let unlockedUntil = 0;
+  let phone = { view: 'home' };
+  const appMeta = { 'com.instagram.android': ['Instagram', 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)', 'IG'], 'com.zhiliaoapp.musically': ['TikTok', '#111', 'TT'], 'com.google.android.youtube': ['YouTube', '#E62117', '▶'], 'org.readera': ['ReadEra', '#3E8E4F', 'R'], 'com.audible.application': ['Audible', '#F29A1F', 'A'] };
+  const limitFor = (pkg) => state?.limits.find((l) => l.packageName === pkg);
+  const goal = () => state?.goals.find((g) => g.kind === 'app');
+  const goalDone = () => !!goal()?.progress?.completed;
+
+  function render() {
+    const v = phone.view;
+    if (v === 'home') {
+      const icons = Object.entries(appMeta).map(([pkg, [name, bg, ch]]) => `<button class="appicon" data-open="${pkg}"><i style="background:${bg}">${ch}</i>${name}</button>`).join('');
+      screen.innerHTML = `<div class="home">${statusBar(true)}<div class="icons">${icons}<button class="appicon" data-open="mello"><i style="background:#fff;overflow:hidden">${mello('happy', 50)}</i>Mello</button></div>
+        <div style="flex:1"></div><span class="hint">${Date.now() < unlockedUntil ? 'Instagram is open. Try TikTok after setting a limit →' : 'Tap Instagram, like you would on autopilot'}</span></div>`;
+    } else if (v === 'feed') {
+      const pkg = phone.app, [name] = appMeta[pkg];
+      const lim = limitFor(pkg);
+      const left = pkg === 'com.instagram.android' ? `${Math.max(1, Math.ceil((unlockedUntil - Date.now()) / 60000))} min` : lim ? `${lim.dailyMinutes} min left today` : null;
+      screen.innerHTML = `<div class="feed">${statusBar(true)}<div class="bar"><span>${name}</span><button class="link" style="color:#E8E8EE" data-go="home">Home</button></div><div class="post tall"></div><div class="meta"></div><div class="post"></div><div class="meta"></div>
+        ${left ? `<div class="pill"><span class="h">${mello('happy', 26)}</span><span class="num">Mello · ${left}</span></div>` : ''}</div>`;
+    } else if (v === 'gate') {
+      screen.innerHTML = `${statusBar()}<div class="view"><div class="center">${mello('curious', 150)}<div class="say">Instagram is waiting.<br>10 minutes in ReadEra first?</div><p class="muted">That's the goal Sam set. Small steps.</p></div>
+        <div class="foot"><button class="btn" data-go="read">Start reading</button><button class="link" data-go="home">Not now</button></div></div>`;
+    } else if (v === 'read') {
+      const total = phone.seconds, left = Math.max(0, total - phone.elapsed), pct = 1 - left / total;
+      const r = 22, c = 2 * Math.PI * r;
+      screen.innerHTML = `${statusBar()}<div class="view">
+        <div class="timer"><svg class="ring" viewBox="0 0 54 54"><circle cx="27" cy="27" r="${r}" fill="none" stroke="#F1ECE2" stroke-width="7"/><circle cx="27" cy="27" r="${r}" fill="none" stroke="#6B7F2E" stroke-width="7" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct)}" transform="rotate(-90 27 27)"/></svg>
+          <div style="flex:1"><b class="num" style="font-size:20px">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</b><br><span class="muted" style="font-size:12px">ReadEra · “The Tortoise and the Path”</span></div>
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="ff" ${phone.ff ? 'checked' : ''}> ×20</label></div>
+        <div class="reader" id="reader">${PASSAGE.map((p) => `<p>${p}</p>`).join('')}</div>
+        <div class="foot"><button class="btn" data-go="quiz" ${left > 0 ? 'disabled' : ''}>${left > 0 ? 'Keep reading' : 'Quiz me'}</button><button class="link" data-go="quiz">Skip ahead (demo)</button></div></div>`;
+      document.getElementById('ff').onchange = (e) => { phone.ff = e.target.checked; };
+    } else if (v === 'quiz') {
+      const q = phone.quiz;
+      if (!q) {
+        screen.innerHTML = `${statusBar()}<div class="center">${mello('curious', 130)}<div class="say">Mello is writing three questions…</div><span class="loading" aria-label="Loading"></span><p class="muted" style="font-size:12px">NVIDIA Nemotron · Nebius Token Factory</p></div>`;
+        return;
+      }
+      if (q.error) {
+        screen.innerHTML = `${statusBar()}<div class="view"><div class="center">${mello('content', 130)}<div class="say">No quiz this time</div><p class="muted">${q.error} Like the real app, reading time alone unlocks Instagram, so nobody gets stuck.</p></div><div class="foot"><button class="btn" data-unlock>Open Instagram</button></div></div>`;
+        return;
+      }
+      const i = phone.qi, item = q.questions[i];
+      screen.innerHTML = `${statusBar()}<div class="progress"><i style="width:${(i / q.questions.length) * 100}%"></i></div><div class="view" style="padding:14px 16px;gap:10px">
+        <div class="say" style="font-size:17px">${item.question}</div>
+        ${item.choices.map((ch, k) => `<button class="opt ${phone.answers[i] === k ? 'sel' : ''}" data-choice="${k}">${ch}</button>`).join('')}
+        <div style="flex:1"></div><button class="btn" data-next ${phone.answers[i] === undefined ? 'disabled' : ''}>${i + 1 < q.questions.length ? 'Next' : 'Check'}</button></div>`;
+    } else if (v === 'result') {
+      const r = phone.result;
+      screen.innerHTML = r.passed
+        ? `${statusBar()}<div class="view"><div class="center">${mello('excited', 160)}<div class="say" style="color:#B07700">You read it! ${r.correct} of ${r.total}</div><p class="muted">Today's goal is done. Instagram is open for 30 minutes.</p></div><div class="foot"><button class="btn" data-unlock>Open Instagram</button></div></div>`
+        : `${statusBar()}<div class="view"><div class="center">${mello('worried', 150)}<div class="say">${r.correct} of ${r.total}. So close.</div><p class="muted">One more minute of reading, then try again.</p></div><div class="foot"><button class="btn" data-again>Read one more minute</button></div></div>`;
+    } else if (v === 'today') {
+      const g = goal(), done = goalDone(), s = state.streak;
+      const days = [...state.usage].reverse();
+      const max = Math.max(1, ...days.map((d) => (d.categories.social || 0) + (d.categories.reading || 0)));
+      screen.innerHTML = `${statusBar()}<div class="view" style="overflow-y:auto"><div class="center" style="justify-content:flex-start;gap:10px;padding-top:8px">
+        <div style="display:flex;justify-content:space-between;width:100%;font-weight:900"><span style="color:#FF9600">🔥 ${s.current}</span><span class="muted">${done ? '1 of 1 today' : '0 of 1 today'}</span></div>
+        ${mello(done ? 'proud' : 'happy', 110)}
+        <div class="say" style="font-size:17px">${done ? 'Goal done. Small steps, big journeys.' : 'One small step today?'}</div>
+        ${g ? `<div class="next"><span style="font-size:26px">📖</span><span><span class="muted" style="font-size:11px">NEXT</span><br><b>${g.title}</b><br><span class="muted" style="font-size:12px">before Instagram · ${done ? 'done' : 'not yet'}</span></span></div>` : ''}
+        <div style="width:100%;text-align:left"><span class="muted" style="font-size:11px;font-weight:900">LAST 6 DAYS</span>
+          <div class="bars">${days.map((d) => `<span title="${d.day}"><s style="height:${((d.categories.reading || 0) / max) * 100}%;background:#6B7F2E"></s><s style="height:${((d.categories.social || 0) / max) * 100}%;background:#E5624F"></s></span>`).join('')}</div>
+          <div class="legend"><span><i style="background:#E5624F"></i>Social</span><span><i style="background:#6B7F2E"></i>Reading</span></div></div>
+        ${state.limits.length || state.interests.length || state.bedtime ? `<div class="rows">${state.limits.map((l) => `<div><span>${appMeta[l.packageName]?.[0] || l.packageName}</span><span>${l.dailyMinutes} min/day</span></div>`).join('')}${state.bedtime?.enabled ? `<div><span>Wind-down</span><span>${hm(state.bedtime.startMinute)}–${hm(state.bedtime.endMinute)}</span></div>` : ''}${state.interests.length ? `<div><span>Interests</span><span>${state.interests.join(', ')}</span></div>` : ''}</div>` : ''}
+      </div><div class="foot"><button class="btn" data-go="home">Back to home screen</button></div></div>`;
+    }
+  }
+  const hm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+  // Reading clock: one real second per second, ×20 when fast-forwarding.
+  setInterval(() => {
+    if (phone.view !== 'read') return;
+    if (phone.elapsed < phone.seconds) {
+      phone.elapsed = Math.min(phone.seconds, phone.elapsed + (phone.ff ? 20 : 1));
+      const reader = document.getElementById('reader'); const top = reader ? reader.scrollTop : 0;
+      render();
+      const r2 = document.getElementById('reader'); if (r2) r2.scrollTop = top;
+    }
+  }, 1000);
+
+  async function startQuiz() {
+    phone = { ...phone, view: 'quiz', quiz: null, qi: 0, answers: [] };
+    render();
+    try {
+      phone.quiz = await api('POST', '/quiz', { passage: PASSAGE.join('\n\n') });
+    } catch (e) {
+      phone.quiz = { error: e.code === 'llm_unavailable' ? 'The AI is not reachable right now.' : e.message };
+    }
+    if (phone.view === 'quiz') render();
+  }
+
+  screen.addEventListener('click', async (e) => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.open) {
+      const pkg = t.dataset.open;
+      if (pkg === 'mello') { phone = { view: 'today' }; return render(); }
+      if (pkg === 'com.instagram.android' && Date.now() >= unlockedUntil && !goalDone()) { phone = { view: 'gate' }; say('Instagram is waiting. Ten minutes in ReadEra first?'); return render(); }
+      if (pkg === 'com.instagram.android' && Date.now() >= unlockedUntil && goalDone()) unlockedUntil = Date.now() + 30 * 60_000;
+      phone = { view: 'feed', app: pkg }; return render();
+    }
+    if (t.dataset.go === 'home') { phone = { view: 'home' }; return render(); }
+    if (t.dataset.go === 'read') { phone = { view: 'read', seconds: 600, elapsed: 0, ff: false }; return render(); }
+    if (t.dataset.go === 'quiz') return startQuiz();
+    if (t.dataset.choice !== undefined) { phone.answers[phone.qi] = Number(t.dataset.choice); return render(); }
+    if (t.dataset.next !== undefined) {
+      if (phone.qi + 1 < phone.quiz.questions.length) { phone.qi++; return render(); }
+      t.disabled = true;
+      try {
+        const r = await api('POST', `/quiz/${phone.quiz.challengeId}/answers`, { answers: phone.answers, seconds: phone.elapsed || 600 });
+        state = r.state; phone = { view: 'result', result: r.result };
+        say(r.result.passed ? 'You read it! Small steps, big journeys.' : 'So close. One more minute, then try again.');
+      } catch (err) { phone = { view: 'quiz', quiz: { error: err.message } }; }
+      return render();
+    }
+    if (t.dataset.again !== undefined) { phone = { view: 'read', seconds: 60, elapsed: 0, ff: false }; return render(); }
+    if (t.dataset.unlock !== undefined) { unlockedUntil = Date.now() + 30 * 60_000; phone = { view: 'feed', app: 'com.instagram.android' }; return render(); }
+  });
+
+  // ---------- chat ----------
+  const msgs = document.getElementById('msgs');
+  const history = [];
+  const EXAMPLES = ['How was Sam\'s week?', 'Limit TikTok to 20 minutes a day', 'I love stoicism. What should I read next?', 'Wind down from 22:30 to 7:00, only Audible'];
+  document.getElementById('chips').innerHTML = EXAMPLES.map((x) => `<button class="chip" type="button">${x}</button>`).join('');
+  document.getElementById('chips').addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (b) send(b.textContent); });
+  const hood = document.getElementById('hood');
+  const esc = (s) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+  function addMsg(role, text, extra = '') {
+    const div = document.createElement('div');
+    div.className = `msg ${role}`;
+    div.innerHTML = `${esc(text)}${extra}`;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+    return div;
+  }
+  msgs.innerHTML = `<div class="hello">${mello('happy', 72)}<div class="msg mello">Hi, I'm Mello. I can see Sam's daily totals and goals, and I can change limits, goals and wind-down hours. Ask me anything, or tap an example.</div></div>`;
+  async function send(text) {
+    text = text.trim(); if (!text || !token) return;
+    document.getElementById('chatErr').hidden = true;
+    history.push({ role: 'user', content: text });
+    addMsg('user', text);
+    const pending = addMsg('mello', 'Thinking…');
+    const btn = document.getElementById('send'); btn.disabled = true;
+    try {
+      const r = await api('POST', '/coach', { messages: history.slice(-12) });
+      history.push({ role: 'assistant', content: r.reply });
+      const tools = r.actions.length ? `<div class="tools" ${hood.checked ? '' : 'hidden'}>${r.actions.map((a) => `${a.ok ? '✓' : '✗'} ${esc(a.tool)}: ${esc(a.summary)}`).join('<br>')}</div>` : '';
+      const offer = r.clientActions.find((a) => a.type === 'start_focus');
+      pending.innerHTML = `${esc(r.reply)}${tools}${offer ? `<div style="margin-top:8px"><button class="btn small" type="button" data-focus="${offer.minutes}">Start ${offer.minutes} min in ${esc(offer.label)}</button></div>` : ''}`;
+      state = r.state;
+      if (phone.view === 'today' || phone.view === 'home' || phone.view === 'feed') render();
+      say(r.reply);
+    } catch (e) {
+      history.pop();
+      pending.remove();
+      const el = document.getElementById('chatErr');
+      el.textContent = e.code === 'llm_unavailable' ? 'Mello can\'t reach the AI right now (Nemotron on Token Factory). Run the live test below to see why.' : e.message;
+      el.hidden = false;
+    } finally { btn.disabled = false; }
+  }
+  hood.addEventListener('change', () => document.querySelectorAll('.msg .tools').forEach((t) => (t.hidden = !hood.checked)));
+  msgs.addEventListener('click', (e) => { const b = e.target.closest('[data-focus]'); if (b) { phone = { view: 'read', seconds: Number(b.dataset.focus) * 60, elapsed: 0, ff: false }; render(); } });
+  document.getElementById('composer').addEventListener('submit', (e) => { e.preventDefault(); const i = document.getElementById('input'); send(i.value); i.value = ''; });
+
+  // ---------- live test ----------
+  document.getElementById('runTest').addEventListener('click', async (e) => {
+    const btn = e.currentTarget, box = document.getElementById('checks');
+    btn.disabled = true; btn.textContent = 'Running…';
+    box.innerHTML = `<div class="check"><span class="loading"></span><span>Calling Nebius Token Factory…</span><span></span></div>`;
+    try {
+      const r = await api('GET', '/live-test');
+      document.getElementById('ltModel').textContent = `${r.model} · ${r.baseUrl.replace(/^https?:\/\//, '')} · ${r.ok ? 'all checks passed' : 'some checks failed'}${r.cached ? ' (result from the last minute)' : ''}`;
+      box.innerHTML = r.checks.map((c) => `<div class="check"><span class="dot" style="background:${c.ok ? 'var(--good)' : 'var(--coral)'}">${c.ok ? '✓' : '✗'}</span><span><b>${esc(c.name)}</b><br><span class="detail">${esc(c.detail)}</span></span><span class="num muted">${c.ms} ms</span></div>`).join('');
+    } catch (err) {
+      box.innerHTML = `<p class="err">${esc(err.message)}</p>`;
+    } finally { btn.disabled = false; btn.textContent = 'Run live test'; }
+  });
+
+  // ---------- start ----------
+  (async () => {
+    try {
+      const r = await api('POST', '/session');
+      token = r.token; state = r.state;
+    } catch (e) {
+      screen.innerHTML = `<div class="center">${mello('sleepy', 120)}<div class="say">The demo can't start right now</div><p class="muted">${esc(e.message)}</p></div>`;
+      return;
+    }
+    render();
+  })();
+})();
+</script>
+</body>
+</html>

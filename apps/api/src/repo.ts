@@ -221,6 +221,13 @@ export class Repo {
     for (const table of ['sessions', 'alerts', 'challenges', 'task_progress']) await this.db.query(`delete from ${table} where kid_id = $1`, [subjectId]);
   }
 
+  /** Removes a demo sandbox: the user's family (and with it the subject and all its data). */
+  async deleteSandbox(userId: string) {
+    const p = await this.one<{ family_id: string }>(`select k.family_id from self_profiles p join kids k on k.id = p.subject_id where p.user_id = $1`, [userId]);
+    await this.db.query(`delete from self_profiles where user_id = $1`, [userId]);
+    if (p) await this.db.query(`delete from families where id = $1`, [p.family_id]);
+  }
+
   // ----- kids -----
   async listKids(familyId: string): Promise<Kid[]> {
     return (await this.db.query(`select * from kids where family_id = $1 and kind = 'kid' and revoked_at is null order by created_at`, [familyId])).map(toKid);

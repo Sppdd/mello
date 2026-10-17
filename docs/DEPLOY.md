@@ -2,6 +2,21 @@
 
 Android first. Work top to bottom; each part lists what's done in the repo and what you do in a console.
 
+## 0. Hackathon demo (fastest path)
+The public demo needs only the API image and a Token Factory key: no Supabase, no phone.
+1. Build: `docker build -f apps/api/Dockerfile -t mello-api .`
+2. Run it anywhere with HTTPS and these variables:
+   - `DEMO=1`
+   - `NEBIUS_API_KEY=<key>`
+   - optionally `NEBIUS_MODEL`
+   - `PORT=8787`
+
+   Running it on **Nebius AI Cloud** (a container on a small CPU VM, or serverless) keeps the whole stack on Nebius. Fly.io, Render and Railway work too.
+3. Open `https://<host>/demo` and press **Run live test**. All four checks should be green. If the first check fails with "not in this account's model list", it prints the Nemotron IDs your account has. Set `NEBIUS_MODEL` to one of them.
+4. Put the URL in the README and on Devpost.
+
+The demo keeps sandboxes in memory (2 h each, at most 200) and limits each visitor to 20 AI calls per 10 minutes.
+
 ## 1. Backend (API)
 1. **Supabase project.**
    - SQL editor: run `apps/api/sql/001_core.sql`, then `002_supabase.sql`, `003_self.sql` and `004_supabase_self.sql`, in that order, once.

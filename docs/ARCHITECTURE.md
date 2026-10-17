@@ -5,7 +5,7 @@ The parent wants an AI agent on their kids' phones that follows the parent's ord
 1. **Reading gate.** When a kid opens a blocked app such as social media, they must read a book for N minutes (for example 1 or 5) before the app unlocks.
 2. **Reading challenges.** The agent checks that the kid actually read, using quick comprehension questions about the pages they just read.
 3. **Voice messages.** The parent can make the agent play an audio message on the kid's phone.
-4. **The AI runs on Nebius Token Factory.** Its OpenAI-compatible API handles the LLM work.
+4. **The AI runs on Nebius Token Factory.** Its OpenAI-compatible API serves NVIDIA Nemotron 3 Super for quizzes, the parent agent and Mello the coach.
 
 Decisions made: Android and iOS, **Android first**. React Native (Expo) with native modules. The parent uses **parent mode in the same app**.
 
@@ -33,7 +33,7 @@ Parent phone (Mello, parent mode) ──HTTPS──▶ Backend API ◀──HTTP
                                                │   ▲                    ├─ Native blocker (Kotlin / Swift ext.)
                                                │   └─ push (FCM/APNs) ──┘  ├─ Reader (EPUB/PDF)
                                                ▼                           └─ Challenge + audio player
-                                    Nebius Token Factory (LLM)
+                                    Nebius Token Factory (NVIDIA Nemotron)
                                     Postgres + object storage (books, audio)
 ```
 

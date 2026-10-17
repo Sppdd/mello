@@ -5,6 +5,9 @@ export type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 export type Tool = OpenAI.Chat.Completions.ChatCompletionTool;
 export type AgentTurn = { role: 'user' | 'assistant'; content: string };
 export type AgentAction = { tool: string; ok: boolean; summary: string };
+/** Drops reasoning blocks some models (e.g. Nemotron with reasoning on) put before the answer. */
+export const stripThinking = (text: string | null | undefined) => (text ?? '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+
 export type ExecuteTool = (name: string, args: any, actions: AgentAction[]) => Promise<unknown>;
 
 /**
@@ -20,7 +23,7 @@ export async function runToolLoop(system: string, tools: Tool[], execute: Execut
     const msg = res.choices[0]?.message;
     if (!msg) break;
     messages.push(msg);
-    if (!msg.tool_calls?.length) return { reply: msg.content ?? '', actions, finished: true };
+    if (!msg.tool_calls?.length) return { reply: stripThinking(msg.content), actions, finished: true };
 
     for (const call of msg.tool_calls) {
       if (call.type !== 'function') continue;

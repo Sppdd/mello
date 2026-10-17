@@ -13,7 +13,7 @@ import {
 import { llm, LlmUnavailableError, MODEL } from './llm.ts';
 import type { Repo } from './repo.ts';
 import { extractJson } from './challenge.ts';
-import { fn, runToolLoop, str, type AgentAction, type AgentTurn, type Tool } from './toolLoop.ts';
+import { fn, runToolLoop, str, stripThinking, type AgentAction, type AgentTurn, type Tool } from './toolLoop.ts';
 
 /**
  * The self-mode coach: the user's chosen character, helping them with their own phone habits.
@@ -265,7 +265,7 @@ export async function reflectionReply(profile: SelfProfile, questions: string[],
         { role: 'user', content: questions.map((q, i) => `Q: ${q}\nA: ${answers[i] ?? ''}`).join('\n\n') },
       ],
     });
-    return res.choices[0]?.message?.content?.trim() || null;
+    return stripThinking(res.choices[0]?.message?.content) || null;
   } catch (err) {
     if (err instanceof LlmUnavailableError || err instanceof OpenAI.APIError) return null;
     throw err;

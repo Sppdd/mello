@@ -533,3 +533,62 @@ describe('self mode API', () => {
     expect(actions.every((a) => a.ok)).toBe(true);
   });
 });
+
+describe('public demo', () => {
+  const demoApp = () => {
+    const app = createApp(db, { verifyParentToken: fakeVerifier, demo: true });
+    return async (method: string, path: string, token?: string, json?: unknown) => {
+      const res = await app.request(path, {
+        method,
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': `10.0.0.${Math.floor(Math.random() * 250)}`, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: json === undefined ? undefined : JSON.stringify(json),
+      });
+      return { status: res.status, body: res.headers.get('content-type')?.includes('json') ? await res.json() : await res.text() };
+    };
+  };
+
+  it('is off unless enabled', async () => {
+    const app = createApp(db, { verifyParentToken: fakeVerifier });
+    expect((await app.request('/demo/session', { method: 'POST' })).status).toBe(404);
+  });
+
+  it('serves the page and starts a seeded sandbox phone', async () => {
+    const call = demoApp();
+    const page = await call('GET', '/demo');
+    expect(page.status).toBe(200);
+    expect(page.body).toContain('Live test');
+    const s = await call('POST', '/demo/session');
+    expect(s.status).toBe(201);
+    expect(s.body.state.goals).toMatchObject([{ kind: 'app', appPackage: 'org.readera', requiredMinutes: 10 }]);
+    expect(s.body.state.rules).toMatchObject([{ apps: ['com.instagram.android'], activity: 'task' }]);
+    expect(s.body.state.usage).toHaveLength(6);
+    expect(s.body.state.streak.current).toBeGreaterThan(0);
+    expect((await call('GET', '/demo/state', s.body.token)).status).toBe(200);
+    expect((await call('GET', '/demo/state', 'nope')).status).toBe(401);
+    expect((await call('POST', '/demo/coach', s.body.token, { messages: [] })).status).toBe(400);
+  });
+
+  it('says clearly when the AI is not configured', async () => {
+    const saved = process.env.NEBIUS_API_KEY;
+    delete process.env.NEBIUS_API_KEY;
+    const call = demoApp();
+    const s = await call('POST', '/demo/session');
+    const chat = await call('POST', '/demo/coach', s.body.token, { messages: [{ role: 'user', content: 'hi' }] });
+    expect(chat).toMatchObject({ status: 503, body: { code: 'llm_unavailable' } });
+    const live = await call('GET', '/demo/live-test');
+    expect(live.body).toMatchObject({ ok: false, checks: [{ name: 'API key and model', ok: false }] });
+    process.env.NEBIUS_API_KEY = saved;
+  });
+
+  it('limits how many sandboxes one visitor can start', async () => {
+    const app = createApp(db, { verifyParentToken: fakeVerifier, demo: true });
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) statuses.push((await app.request('/demo/session', { method: 'POST', headers: { 'x-forwarded-for': '203.0.113.9' } })).status);
+    expect(statuses.slice(0, 5).every((s) => s === 201)).toBe(true);
+    expect(statuses[5]).toBe(429);
+  });
+
+  it('strips reasoning blocks before parsing model JSON', () => {
+    expect(extractJson('<think>let me think {"no":1}</think>{"questions":[]}')).toBe('{"questions":[]}');
+  });
+});

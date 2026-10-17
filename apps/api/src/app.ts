@@ -26,6 +26,7 @@ import { NotFound, Repo } from './repo.ts';
 import { generateChallenge, grade } from './challenge.ts';
 import { runAgent } from './agent.ts';
 import { reflectionQuestions, reflectionReply, runCoach, streakOf } from './coach.ts';
+import { demoRouter } from './demo.ts';
 import { sendPush } from './push.ts';
 import { LlmUnavailableError } from './llm.ts';
 import type { VerifyParentToken } from './auth.ts';
@@ -48,7 +49,7 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './data/audio';
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'day must be YYYY-MM-DD');
 
-export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken }) {
+export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken; demo?: boolean }) {
   const repo = new Repo(db);
   const app = new Hono();
 
@@ -487,5 +488,7 @@ export function createApp(db: Db, opts: { verifyParentToken: VerifyParentToken }
   app.route('/parent', parent);
   app.route('/kid', kid);
   app.route('/self', self);
+  // Public no-login demo for judges (DEMO=1); see src/demo.ts.
+  if (opts.demo) app.route('/demo', demoRouter(repo));
   return app;
 }

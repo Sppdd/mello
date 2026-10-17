@@ -1,13 +1,18 @@
 # Mello
 
-An AI reading buddy that lives on your kids' phones and follows your instructions.
+Small steps, big journeys. Mello is a calm tortoise companion on your phone that turns "open Instagram" into "ten minutes of reading first", for yourself or for your kids.
+
+> **Nebius × NVIDIA Global AI Hackathon: Personal AI track.**
+> **Try it live:** `<your demo URL>/demo` (no login; a sandbox phone that lasts two hours).
+> **The AI:** every quiz, chat and reflection runs on **NVIDIA Nemotron 3 Super** via **Nebius Token Factory**.
+> **For judges:** the pitch, demo script and checklist are in [docs/hackathon/PITCH.md](docs/hackathon/PITCH.md).
 
 - **Reading gate.** Pick apps (TikTok, Instagram, YouTube…). When your kid opens one, Mello asks them to read for a few minutes first.
 - **Proof of reading.** After the timer, Mello asks 2–3 quick questions about the pages they just read. Pass, and the app opens. Miss, and they read one more minute and try again.
 - **Messages from home.** Type a message that Mello reads aloud on their phone, or record your own voice.
 - **Talk to the agent.** "Make Sara read 5 minutes before TikTok" or "How much did Adam read this week?" The agent runs on [Nebius Token Factory](https://tokenfactory.nebius.com).
 
-- **Just me.** Coach your own phone, privately. Pick a companion character, swap scrolling for reading or listening with focus sessions in apps like ReadEra or Audible, see your habits, and keep a streak. See [docs/SELF_MODE.md](docs/SELF_MODE.md).
+- **Just me.** Coach your own phone, privately. Mello helps you swap scrolling for reading or listening with focus sessions in apps like ReadEra or Audible, see your habits, and keep a streak. See [docs/SELF_MODE.md](docs/SELF_MODE.md).
 
 Android first. On iPhone the app runs in reading-only mode for now; the iOS gate needs Apple's Screen Time entitlement (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 
@@ -19,6 +24,21 @@ apps/mobile    Expo app with parent and kid modes (expo-router, src/app)
 apps/mobile/modules/mello-blocker   native module: Android AccessibilityService gate, iOS stub
 packages/shared   zod schemas + gate logic shared by the API and the app
 ```
+
+## Live demo (no phone needed)
+
+```sh
+npm install
+NEBIUS_API_KEY=... DEMO=1 npm run api      # then open http://localhost:8787/demo
+npm run live-test -w @mello/api            # checks Nemotron on Token Factory end to end
+```
+
+The demo is a browser version of the self-mode flow, backed by the real API:
+- a sandbox phone: opening Instagram triggers the gate, you read, Nemotron writes a quiz, and passing unlocks the app;
+- a chat with Mello, where Nemotron tool calls change the sandbox phone's limits and goals;
+- a **Live test** panel.
+
+It needs no Supabase. Deploy it with `apps/api/Dockerfile` (see [docs/DEPLOY.md](docs/DEPLOY.md)).
 
 ## Run it
 
@@ -63,7 +83,7 @@ Push notifications need an EAS project id (`npx eas-cli init`). Until you set on
 | Companion (self mode) | `POST /self/coach/chat` | Same loop, in the chosen character's voice: usage summary, limits, focus goals, wind-down, interests, focus offers |
 | Reflection | `POST /self/reflect`, `/self/reflections` | 1–2 open questions after a focus session, and a short reply; falls back to fixed questions without the LLM |
 
-The model is configurable with `NEBIUS_MODEL` (default `Qwen/Qwen3-235B-A22B-Instruct-2507`; it must support tool calling). If the API key is missing or Token Factory is down, the quiz is skipped and reading time alone unlocks the app, so a kid is never stuck.
+The model is NVIDIA Nemotron 3 Super (`nvidia/nemotron-3-super-120b-a12b`), configurable with `NEBIUS_MODEL`; it must support tool calling. `npm run live-test -w @mello/api` checks the key, the model, a chat, a tool call and a quiz against Token Factory. If the API key is missing or Token Factory is down, the quiz is skipped and reading time alone unlocks the app, so a kid is never stuck.
 
 ## Safety
 - The phone app, dialer, emergency and Settings apps can never be blocked.

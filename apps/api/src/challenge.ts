@@ -60,8 +60,9 @@ export async function generateChallenge(passage: string, age: number | null): Pr
   throw new LlmUnavailableError(`Model returned an invalid challenge: ${String(lastError).slice(0, 300)}`);
 }
 
-/** Strips ```json fences some models add even in JSON mode. */
+/** Strips reasoning blocks (<think>…</think>) and ```json fences some models add even in JSON mode. */
 export function extractJson(text: string): string {
+  text = text.replace(/<think>[\s\S]*?<\/think>/g, '');
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   return start >= 0 && end > start ? text.slice(start, end + 1) : text;

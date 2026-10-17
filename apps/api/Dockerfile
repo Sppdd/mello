@@ -14,6 +14,7 @@ RUN npm ci --workspace @mello/api --workspace @mello/shared --include=dev --no-a
 COPY packages/shared packages/shared
 COPY apps/api/src apps/api/src
 COPY apps/api/sql apps/api/sql
+COPY apps/api/public apps/api/public
 COPY apps/api/tsconfig.json apps/api/
 
 USER node
